@@ -32,6 +32,7 @@ def main():
     running = True
     sqSelected = () # no square is selected initially, keep track of the last click of the user (tuple: (row, col))
     validMoves = []
+    flipped = False
     drawGameState(screen, gs)
     while running:
         for e in p.event.get():
@@ -40,8 +41,9 @@ def main():
             elif e.type == p.MOUSEBUTTONDOWN:
                 location = p.mouse.get_pos() # (x,y) location of mouse
                 col = location[0] // SQ_SIZE
-                row = location[1] // SQ_SIZE                
-                
+                row = location[1] // SQ_SIZE
+                if flipped:
+                    row = DIMENSION - 1 - row               
                 if row >= DIMENSION or col >= DIMENSION:
                     continue # click was outside the board
                 if not sqSelected: 
@@ -58,13 +60,53 @@ def main():
                         validMoves = []
                         drawGameState(screen, gs)
                         continue
-                    for validmove in validMoves:
+                    if gs.board[row][col] != 0 and (gs.board[row][col] > 0) == (gs.player > 0):
+                        sqSelected = (row, col)
+                        validMoves = gs.info.validMoves.get((row, col), [])
+                        drawGameState(screen, gs)
+                        p.draw.rect(screen, p.Color("blue"), p.Rect(col*SQ_SIZE, row*SQ_SIZE, SQ_SIZE, SQ_SIZE), 4)
+                        for move in validMoves:
+                            p.draw.rect(screen, p.Color("yellow"), p.Rect(move.endCol*SQ_SIZE, move.endRow*SQ_SIZE, SQ_SIZE, SQ_SIZE), 4)
+                        continue
+                    i = 0
+                    promotionChosen = False
+                    promotionChoice = 0
+                    reselect = False
+                    while i < len(validMoves):
+                        validmove = validMoves[i]
                         if row == validmove.endRow and col == validmove.endCol:
+                            if validmove.pawnPromotion != 0 and not promotionChosen:
+                                player = gs.player
+                                drawPromotionChoice(screen, gs, row, col, player)
+                                choosing = True
+                                while choosing:
+                                    for e in p.event.get():
+                                        if e.type == p.MOUSEBUTTONDOWN:
+                                            location = p.mouse.get_pos() # (x,y) location of mouse
+                                            r = location[1] // SQ_SIZE
+                                            c = location[0] // SQ_SIZE
+                                            if c == col and abs(row - r) < 4:
+                                                promotionChoice = abs(row - r)
+                                                choosing = False
+                                                i += promotionChoice
+                                                promotionChosen = True
+                                            else:
+                                                choosing = False
+                                                reselect = True
+                                if reselect:
+                                    drawGameState(screen, gs)
+                                    p.draw.rect(screen, p.Color("blue"), p.Rect(sqSelected[1]*SQ_SIZE, sqSelected[0]*SQ_SIZE, SQ_SIZE, SQ_SIZE), 4)
+                                    for move in validMoves:
+                                        p.draw.rect(screen, p.Color("yellow"), p.Rect(move.endCol*SQ_SIZE, move.endRow*SQ_SIZE, SQ_SIZE, SQ_SIZE), 4)
+                                    break
+                                continue                               
                             print(validmove.getChessNotation())
                             gs.makeMove(validmove)
-                            sqSelected = () # reset user clicks
+                            sqSelected = ()
                             validMoves = []
                             drawGameState(screen, gs)
+                            break
+                        i += 1
                     continue
     
             elif e.type == p.KEYDOWN:
@@ -93,6 +135,14 @@ def drawPieces(screen, board):
             piece = board[r][c]
             if piece != 0: # not an empty square
                 screen.blit(IMAGES[piece], p.Rect(c*SQ_SIZE, r*SQ_SIZE, SQ_SIZE, SQ_SIZE))
+                
+def drawPromotionChoice(screen, gs, row, col, player):
+    color = p.Color("gray")
+    promotionPieces = [5,4,3,2] # queen, rook, bishop, knight
+    for i in range(4):
+        p.draw.rect(screen, color, p.Rect(col*SQ_SIZE, (row+i*player)*SQ_SIZE, SQ_SIZE, SQ_SIZE))
+        screen.blit(IMAGES[promotionPieces[i]*player], p.Rect(col*SQ_SIZE, (row+i*player)*SQ_SIZE, SQ_SIZE, SQ_SIZE))
+    p.display.flip()
 
 if __name__ == "__main__":
     main()

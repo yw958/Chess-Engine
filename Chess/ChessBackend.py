@@ -4,6 +4,8 @@ of the chess game. Also, be responsible for determining the valid moves at
 the current state. And it'll keep a move log.
 """
 import numpy as np
+PIECES = [None, 'P', 'N', 'B', 'R', 'Q', 'K']
+VALUES = [0, 1, 3, 3, 5, 9, 1000]
 
 class Move:
     def __init__(self, startSq, endSq, board):
@@ -15,8 +17,7 @@ class Move:
         self.pieceCaptured = board[self.endRow][self.endCol]
         self.isCastlingMove = False
         self.isEnPassantMove = False
-        self.isPawnPromotion = False
-
+        self.pawnPromotion = 0
     def getChessNotation(self):
         # Simple chess notation (e.g., "e4" for pawn move to e4)
         if self.isCastlingMove:
@@ -24,6 +25,13 @@ class Move:
                 return "O-O"
             else:
                 return "O-O-O"
+        if self.isEnPassantMove:
+            return f"{chr(ord('a') + self.startCol)}{8 - self.startRow}x{chr(ord('a') + self.endCol)}{8 - self.endRow} e.p."
+        if self.pawnPromotion:
+            return f"{chr(ord('a') + self.startCol)}{8 - self.startRow}{chr(ord('a') + self.endCol)}{8 - self.endRow}= {PIECES[abs(self.pawnPromotion)]}"
+        if self.pieceCaptured != 0:
+            pieceChar = '' if abs(self.pieceMoved) == 1 else PIECES[abs(self.pieceMoved)]
+            return f"{pieceChar}{chr(ord('a') + self.startCol)}x{chr(ord('a') + self.endCol)}{8 - self.endRow}"
         return f"{chr(ord('a') + self.startCol)}{8 - self.startRow} -> {chr(ord('a') + self.endCol)}{8 - self.endRow}"
     
 class Info:
@@ -88,11 +96,18 @@ class GameState:
                 self.info.castlingRights[self.player] = (self.info.castlingRights[self.player][0], False)
             elif move.startCol == 7:
                 self.info.castlingRights[self.player] = (False, self.info.castlingRights[self.player][1])
+        elif move.pawnPromotion:
+            self.board[move.endRow][move.endCol] = move.pawnPromotion
         elif move.isEnPassantMove:
                 self.board[move.endRow + self.player][move.endCol] = 0
         self.info.enPassantPossible = ()
         if abs(move.pieceMoved) == 1 and abs(move.startRow - move.endRow) == 2:
             self.info.enPassantPossible = ( (move.startRow + move.endRow)//2, move.startCol )
+        elif abs(move.pieceCaptured) == 4:
+            if move.endCol == 0:
+                self.info.castlingRights[-self.player] = (self.info.castlingRights[-self.player][0], False)
+            elif move.endCol == 7:
+                self.info.castlingRights[-self.player] = (False, self.info.castlingRights[-self.player][1])
         self.player *= -1 # switch players
         self.updateKingSafety(self.player)
         self.updateAllValidMoves()
@@ -300,7 +315,13 @@ class GameState:
         if self.board[row - player][col] == 0:
             move = Move((row, col), (row - player, col), self.board)
             if self.checkMoveSafety(move, player):
-                moves.append(move)
+                if row - player == 0 or row - player == 7:
+                    for promoPiece in [5,4,3,2]: # promote to queen, rook, bishop, knight
+                        move = Move((row, col), (row - player, col), self.board)
+                        move.pawnPromotion = promoPiece * player
+                        moves.append(move)
+                else:
+                    moves.append(move)
             if row == startRow and self.board[row - 2 * player][col] == 0:
                 move = Move((row, col), (row - 2 * player, col), self.board)
                 if self.checkMoveSafety(move, player):
@@ -310,7 +331,13 @@ class GameState:
                 if self.board[row - player][col + dc] * player < 0:
                     move = Move((row, col), (row - player, col + dc), self.board)
                     if self.checkMoveSafety(move, player):
-                        moves.append(move)
+                        if row - player == 0 or row - player == 7:
+                            for promoPiece in [5,4,3,2]: # promote to queen, rook, bishop, knight
+                                move = Move((row, col), (row - player, col + dc), self.board)
+                                move.pawnPromotion = promoPiece * player
+                                moves.append(move)
+                        else:
+                            moves.append(move)
                 elif (row - player, col + dc) == self.info.enPassantPossible:
                     move = Move((row, col), (row - player, col + dc), self.board)
                     move.isEnPassantMove = True
