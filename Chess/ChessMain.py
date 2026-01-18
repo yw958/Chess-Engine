@@ -3,6 +3,7 @@ Handles user input and displaying the current GameState object.
 """
 import pygame as p
 from Chess import ChessBackend
+from Chess import ChessEngine
 import os
 
 BOARD_WIDTH = BOARD_HEIGHT = 512
@@ -33,6 +34,8 @@ def main():
     sqSelected = () # no square is selected initially, keep track of the last click of the user (tuple: (row, col))
     validMoves = []
     flipped = False
+    engineEnabled = -1
+    engineDepth = 3
     drawGameState(screen, gs, flipped)
     while running:
         for e in p.event.get():
@@ -127,6 +130,27 @@ def main():
                                     print("White wins!")
                                 else:
                                     print("Black wins!")
+                            #Engine move
+                            elif engineEnabled == gs.player:
+                                print("Engine is thinking...")
+                                engineMove = ChessEngine.findBestMove(gs, engineDepth)
+                                if engineMove is not None:
+                                    print(engineMove.getChessNotation())
+                                    gs.makeMove(engineMove)
+                                    drawGameState(screen, gs, flipped)
+                                    if not flipped:
+                                        p.draw.rect(screen, p.Color("red"), p.Rect(engineMove.endCol*SQ_SIZE, engineMove.endRow*SQ_SIZE, SQ_SIZE, SQ_SIZE), 4)
+                                        p.draw.rect(screen, p.Color("red"), p.Rect(engineMove.startCol*SQ_SIZE, engineMove.startRow*SQ_SIZE, SQ_SIZE, SQ_SIZE), 4)
+                                    else:
+                                        p.draw.rect(screen, p.Color("red"), p.Rect(engineMove.endCol*SQ_SIZE, (DIMENSION - 1 - engineMove.endRow)*SQ_SIZE, SQ_SIZE, SQ_SIZE), 4)
+                                        p.draw.rect(screen, p.Color("red"), p.Rect(engineMove.startCol*SQ_SIZE, (DIMENSION - 1 - engineMove.startRow)*SQ_SIZE, SQ_SIZE, SQ_SIZE), 4)
+                                if gs.info.winner != None:
+                                    if gs.info.winner == 0:
+                                        print("Draw!")
+                                    elif gs.info.winner == 1:
+                                        print("White wins!")
+                                    else:
+                                        print("Black wins!")
                             break
                         i += 1
     

@@ -3,9 +3,8 @@ Responsible for storing all the information about the current state
 of the chess game. Also, be responsible for determining the valid moves at
 the current state. And it'll keep a move log.
 """
-import numpy as np
 PIECES = [None, 'P', 'N', 'B', 'R', 'Q', 'K']
-VALUES = [0, 1, 3, 3, 5, 9, 1000]
+VALUES = [0, 1, 3, 3, 5, 9, 0]
 
 class Move:
     def __init__(self, startSq, endSq, board):
@@ -47,6 +46,7 @@ class Info:
         self.validMoves = {} 
         self.winner = None # None, 1 for white win, -1 for black win, 0 for draw
         self.seventyFiveMoveRuleCounter = 0 # counts half-moves since last pawn move or capture for 75-move rule
+        self.eval = 0 # evaluation score of the position
     def copy(self):
         new = Info()
         new.castlingRights = self.castlingRights[:]     
@@ -55,15 +55,16 @@ class Info:
         new.block_mask = [s.copy() for s in self.block_mask]
         new.capture_mask = [s.copy() for s in self.capture_mask]
         new.enPassantPossible = self.enPassantPossible
-        new.validMoves = {}
+        new.validMoves = {} #No need to copy validMoves for undo
         new.winner = self.winner
         new.seventyFiveMoveRuleCounter = self.seventyFiveMoveRuleCounter
+        new.eval = self.eval
         return new
     
 class GameState:
     def __init__(self):
         # We represent each piece with an integer. White pieces are positive, and black pieces are negative.
-        self.board = np.array([
+        self.board = [
             [-4, -2, -3, -5, -6, -3, -2, -4],
             [-1, -1, -1, -1, -1, -1, -1, -1],
             [ 0,  0,  0,  0,  0,  0,  0,  0],
@@ -72,15 +73,34 @@ class GameState:
             [ 0,  0,  0,  0,  0,  0,  0,  0],
             [ 1,  1,  1,  1,  1,  1,  1,  1],
             [ 4,  2,  3,  5,  6,  3,  2,  4]
-        ]) # 8x8 2D numpy array
+        ]
         # Piece codes: 1 = Pawn, 2 = Knight, 3 = Bishop, 4 = Rook, 5 = Queen, 6 = King
         self.player = 1 # 1 for white, -1 for black
         self.moveLog = []
         self.infoLog = []
         self.info = Info()
+        self.boardHistory = []
         self.boardCounter = {}
-        self.boardCounter[self.board.tobytes()] = 1
+        boardRep = self.boardRepresentation()
+        self.boardCounter[boardRep] = 1
+        self.boardHistory.append(boardRep)
         self.updateAllValidMoves()
+    
+    def boardRepresentation(self):
+        lst = []
+        zeroCount = 0
+        for i in range(8):
+            for j in range(8):
+                piece = self.board[i][j]
+                if piece == 0:
+                    zeroCount += 1
+                else:
+                    if zeroCount > 0:
+                        lst.append('(' + str(zeroCount) + ')')
+                    lst.append(str(piece))
+                    zeroCount = 0
+        lst.append('(' + str(zeroCount) + ')')
+        return ''.join(lst)     
         
     def makeMove(self, move: Move):
         if (move.pieceMoved > 0) != (self.player > 0):
@@ -107,7 +127,7 @@ class GameState:
         elif move.pawnPromotion:
             self.board[move.endRow][move.endCol] = move.pawnPromotion
         elif move.isEnPassantMove:
-                self.board[move.endRow + self.player][move.endCol] = 0
+            self.board[move.endRow + self.player][move.endCol] = 0
         self.info.enPassantPossible = ()
         if abs(move.pieceMoved) == 1 and abs(move.startRow - move.endRow) == 2:
             self.info.enPassantPossible = ( (move.startRow + move.endRow)//2, move.startCol )
@@ -123,11 +143,13 @@ class GameState:
             self.info.seventyFiveMoveRuleCounter += 1
         if self.info.seventyFiveMoveRuleCounter >= 150:
             self.info.winner = 0 # Draw by 75-move rule
-        boardBytes = self.board.tobytes()
-        times = self.boardCounter.get(boardBytes, 0) + 1
-        if times >= 5:
+        boardRepresentation = self.boardRepresentation()
+        count = self.boardCounter.get(boardRepresentation, 0)
+        count += 1
+        self.boardCounter[boardRepresentation] = count
+        if count >= 5:
             self.info.winner = 0 # Draw by fivefold repetition
-        self.boardCounter[boardBytes] = times
+        self.boardHistory.append(boardRepresentation)
         self.player *= -1 # switch players
         self.updateKingSafety(self.player)
         self.updateAllValidMoves()
@@ -136,20 +158,43 @@ class GameState:
                 self.info.winner = -self.player # Checkmate
             else:
                 self.info.winner = 0 # Stalemate (draw)
-        
-    def undoMove(self,steps = 1):
-        for _ in range(steps):
-            if len(self.moveLog) == 0:
-                return
-            self.player *= -1 # switch players back
-            self.boardCounter[self.board.tobytes()] -= 1
-            move:Move = self.moveLog.pop()
-            self.info:Info = self.infoLog.pop()
-            self.board[move.startRow][move.startCol] = move.pieceMoved
-            if move.isEnPassantMove:
-                self.board[move.endRow + self.player][move.endCol] = move.pieceCaptured
+        self.updateEval(move)
+    
+    def updateEval(self, move: Move):
+        if self.info.winner is not None:
+            if self.info.winner == 1:
+                self.info.eval = float('inf')
+            elif self.info.winner == -1:
+                self.info.eval = float('-inf')
             else:
-                self.board[move.endRow][move.endCol] = move.pieceCaptured
+                self.info.eval = 0
+            return
+        # Update evaluation based on last move
+        pieceCapture = move.pieceCaptured
+        pawnPromotion = move.pawnPromotion
+        if pieceCapture != 0:
+            self.info.eval += VALUES[abs(pieceCapture)] * (-self.player)
+        if pawnPromotion != 0:
+            self.info.eval += (VALUES[abs(pawnPromotion)] - 1) * (-self.player)
+        
+    def undoMove(self, reCalculateMoves = True):
+        if len(self.moveLog) == 0:
+            return
+        self.player *= -1 # switch players back
+        boardRep = self.boardHistory.pop()
+        count = self.boardCounter[boardRep] - 1
+        if count == 0:
+            del self.boardCounter[boardRep]
+        else:
+            self.boardCounter[boardRep] = count
+        move:Move = self.moveLog.pop()
+        self.info:Info = self.infoLog.pop()
+        self.board[move.startRow][move.startCol] = move.pieceMoved
+        if move.isEnPassantMove:
+            self.board[move.endRow + self.player][move.endCol] = move.pieceCaptured
+            self.board[move.endRow][move.endCol] = 0
+        else:
+            self.board[move.endRow][move.endCol] = move.pieceCaptured
             if move.pieceMoved == 6 or move.pieceMoved == -6:
                 self.info.kingLocations[self.player] = (move.startRow, move.startCol)
                 if move.isCastlingMove:
@@ -159,7 +204,8 @@ class GameState:
                     else: # queen side
                         self.board[move.endRow][0] = self.board[move.endRow][move.endCol + 1]
                         self.board[move.endRow][move.endCol + 1] = 0
-        self.updateAllValidMoves()
+        if reCalculateMoves:
+            self.updateAllValidMoves()
     
     def isAttacked(self, pieceRow, pieceCol, player):
         #Check if attacked by pawn
@@ -280,8 +326,9 @@ class GameState:
             if attackingPiece in [2, 1, 6]: # knight, pawn, king
                 self.info.capture_mask[player].add((attackingPieceRow, attackingPieceCol))
             else:
-                directionRow = np.sign(attackingPieceRow - kingRow)
-                directionCol = np.sign(attackingPieceCol - kingCol)
+                # Compute the direction from the king to the attacking piece
+                directionRow = (attackingPieceRow > kingRow) - (attackingPieceRow < kingRow)
+                directionCol = (attackingPieceCol > kingCol) - (attackingPieceCol < kingCol)
                 currRow = kingRow + directionRow
                 currCol = kingCol + directionCol
                 while (currRow, currCol) != (attackingPieceRow, attackingPieceCol):
