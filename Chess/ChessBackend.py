@@ -28,7 +28,9 @@ class Move:
         if self.isEnPassantMove:
             return f"{chr(ord('a') + self.startCol)}{8 - self.startRow}x{chr(ord('a') + self.endCol)}{8 - self.endRow} e.p."
         if self.pawnPromotion:
-            return f"{chr(ord('a') + self.startCol)}{8 - self.startRow}{chr(ord('a') + self.endCol)}{8 - self.endRow}= {PIECES[abs(self.pawnPromotion)]}"
+            if self.pieceCaptured != 0:
+                return f"{chr(ord('a') + self.startCol)}x{chr(ord('a') + self.endCol)}{8 - self.endRow}={PIECES[abs(self.pawnPromotion)]}"
+            return f"{chr(ord('a') + self.startCol)}{8 - self.startRow}{chr(ord('a') + self.endCol)}{8 - self.endRow}={PIECES[abs(self.pawnPromotion)]}"
         if self.pieceCaptured != 0:
             pieceChar = '' if abs(self.pieceMoved) == 1 else PIECES[abs(self.pieceMoved)]
             return f"{pieceChar}{chr(ord('a') + self.startCol)}x{chr(ord('a') + self.endCol)}{8 - self.endRow}"
@@ -43,6 +45,8 @@ class Info:
         self.capture_mask = [set(),set(),set()]
         self.enPassantPossible = () # coordinates for the square where en passant capture is possible
         self.validMoves = {} 
+        self.winner = None # None, 1 for white win, -1 for black win, 0 for draw
+        self.seventyFiveMoveRuleCounter = 0 # counts half-moves since last pawn move or capture for 75-move rule
     def copy(self):
         new = Info()
         new.castlingRights = self.castlingRights[:]     
@@ -52,6 +56,8 @@ class Info:
         new.capture_mask = [s.copy() for s in self.capture_mask]
         new.enPassantPossible = self.enPassantPossible
         new.validMoves = {}
+        new.winner = self.winner
+        new.seventyFiveMoveRuleCounter = self.seventyFiveMoveRuleCounter
         return new
     
 class GameState:
@@ -72,6 +78,8 @@ class GameState:
         self.moveLog = []
         self.infoLog = []
         self.info = Info()
+        self.boardCounter = {}
+        self.boardCounter[self.board.tobytes()] = 1
         self.updateAllValidMoves()
         
     def makeMove(self, move: Move):
@@ -108,30 +116,44 @@ class GameState:
                 self.info.castlingRights[-self.player] = (self.info.castlingRights[-self.player][0], False)
             elif move.endCol == 7:
                 self.info.castlingRights[-self.player] = (False, self.info.castlingRights[-self.player][1])
+        # Update 75-move rule counter
+        if abs(move.pieceMoved) == 1 or move.pieceCaptured != 0:
+            self.info.seventyFiveMoveRuleCounter = 0
+        else:
+            self.info.seventyFiveMoveRuleCounter += 1
+        if self.info.seventyFiveMoveRuleCounter >= 150:
+            self.info.winner = 0 # Draw by 75-move rule
+        boardBytes = self.board.tobytes()
+        times = self.boardCounter.get(boardBytes, 0) + 1
+        if times >= 5:
+            self.info.winner = 0 # Draw by fivefold repetition
+        self.boardCounter[boardBytes] = times
         self.player *= -1 # switch players
         self.updateKingSafety(self.player)
         self.updateAllValidMoves()
         
-    def undoMove(self):
-        if len(self.moveLog) == 0:
-            return
-        self.player *= -1 # switch players back
-        move:Move = self.moveLog.pop()
-        self.info:Info = self.infoLog.pop()
-        self.board[move.startRow][move.startCol] = move.pieceMoved
-        if move.isEnPassantMove:
-            self.board[move.endRow + self.player][move.endCol] = move.pieceCaptured
-        else:
-            self.board[move.endRow][move.endCol] = move.pieceCaptured
-        if move.pieceMoved == 6 or move.pieceMoved == -6:
-            self.info.kingLocations[self.player] = (move.startRow, move.startCol)
-            if move.isCastlingMove:
-                if move.endCol - move.startCol == 2: # king side
-                    self.board[move.endRow][7] = self.board[move.endRow][move.endCol - 1]
-                    self.board[move.endRow][move.endCol - 1] = 0
-                else: # queen side
-                    self.board[move.endRow][0] = self.board[move.endRow][move.endCol + 1]
-                    self.board[move.endRow][move.endCol + 1] = 0
+    def undoMove(self,steps = 1):
+        for _ in range(steps):
+            if len(self.moveLog) == 0:
+                return
+            self.player *= -1 # switch players back
+            self.boardCounter[self.board.tobytes()] -= 1
+            move:Move = self.moveLog.pop()
+            self.info:Info = self.infoLog.pop()
+            self.board[move.startRow][move.startCol] = move.pieceMoved
+            if move.isEnPassantMove:
+                self.board[move.endRow + self.player][move.endCol] = move.pieceCaptured
+            else:
+                self.board[move.endRow][move.endCol] = move.pieceCaptured
+            if move.pieceMoved == 6 or move.pieceMoved == -6:
+                self.info.kingLocations[self.player] = (move.startRow, move.startCol)
+                if move.isCastlingMove:
+                    if move.endCol - move.startCol == 2: # king side
+                        self.board[move.endRow][7] = self.board[move.endRow][move.endCol - 1]
+                        self.board[move.endRow][move.endCol - 1] = 0
+                    else: # queen side
+                        self.board[move.endRow][0] = self.board[move.endRow][move.endCol + 1]
+                        self.board[move.endRow][move.endCol + 1] = 0
         self.updateAllValidMoves()
     
     def isAttacked(self, pieceRow, pieceCol, player):
@@ -265,6 +287,8 @@ class GameState:
                 
     def updateAllValidMoves(self):
         self.info.validMoves = {}
+        if self.info.winner is not None:
+            return
         for r in range(8):
             for c in range(8):
                 if self.board[r][c] != 0 and (self.board[r][c] > 0) == (self.player > 0):
