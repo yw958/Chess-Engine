@@ -33,7 +33,7 @@ def main():
     sqSelected = () # no square is selected initially, keep track of the last click of the user (tuple: (row, col))
     validMoves = []
     flipped = False
-    drawGameState(screen, gs)
+    drawGameState(screen, gs, flipped)
     while running:
         for e in p.event.get():
             if e.type == p.QUIT:
@@ -50,20 +50,26 @@ def main():
                     if gs.board[row][col] == 0 or (gs.board[row][col] > 0) != (gs.player > 0):
                         continue # clicked on an empty square without having selected a piece
                     sqSelected = (row, col)
-                    p.draw.rect(screen, p.Color("blue"), p.Rect(col*SQ_SIZE, row*SQ_SIZE, SQ_SIZE, SQ_SIZE), 4)
+                    if not flipped:
+                        p.draw.rect(screen, p.Color("blue"), p.Rect(col*SQ_SIZE, row*SQ_SIZE, SQ_SIZE, SQ_SIZE), 4)
+                    else:
+                        p.draw.rect(screen, p.Color("blue"), p.Rect(col*SQ_SIZE, (DIMENSION - 1 - row)*SQ_SIZE, SQ_SIZE, SQ_SIZE), 4)
                     validMoves = gs.info.validMoves.get((row, col), [])
                     for move in validMoves:
-                        p.draw.rect(screen, p.Color("yellow"), p.Rect(move.endCol*SQ_SIZE, move.endRow*SQ_SIZE, SQ_SIZE, SQ_SIZE), 4)
+                        if not flipped:
+                            p.draw.rect(screen, p.Color("yellow"), p.Rect(move.endCol*SQ_SIZE, move.endRow*SQ_SIZE, SQ_SIZE, SQ_SIZE), 4)
+                        else:
+                            p.draw.rect(screen, p.Color("yellow"), p.Rect(move.endCol*SQ_SIZE, (DIMENSION - 1 - move.endRow)*SQ_SIZE, SQ_SIZE, SQ_SIZE), 4)
                 else:
                     if (row, col) == sqSelected: # user clicked the same square twice
                         sqSelected = () # deselect
                         validMoves = []
-                        drawGameState(screen, gs)
+                        drawGameState(screen, gs, flipped)
                         continue
                     if gs.board[row][col] != 0 and (gs.board[row][col] > 0) == (gs.player > 0):
                         sqSelected = (row, col)
                         validMoves = gs.info.validMoves.get((row, col), [])
-                        drawGameState(screen, gs)
+                        drawGameState(screen, gs, flipped)
                         p.draw.rect(screen, p.Color("blue"), p.Rect(col*SQ_SIZE, row*SQ_SIZE, SQ_SIZE, SQ_SIZE), 4)
                         for move in validMoves:
                             p.draw.rect(screen, p.Color("yellow"), p.Rect(move.endCol*SQ_SIZE, move.endRow*SQ_SIZE, SQ_SIZE, SQ_SIZE), 4)
@@ -77,7 +83,7 @@ def main():
                         if row == validmove.endRow and col == validmove.endCol:
                             if validmove.pawnPromotion != 0 and not promotionChosen:
                                 player = gs.player
-                                drawPromotionChoice(screen, gs, row, col, player)
+                                drawPromotionChoice(screen, gs, row, col, player, flipped)
                                 choosing = True
                                 while choosing:
                                     for e in p.event.get():
@@ -85,6 +91,8 @@ def main():
                                             location = p.mouse.get_pos() # (x,y) location of mouse
                                             r = location[1] // SQ_SIZE
                                             c = location[0] // SQ_SIZE
+                                            if flipped:
+                                                r = DIMENSION - 1 - r
                                             if c == col and abs(row - r) < 4:
                                                 promotionChoice = abs(row - r)
                                                 choosing = False
@@ -94,54 +102,91 @@ def main():
                                                 choosing = False
                                                 reselect = True
                                 if reselect:
-                                    drawGameState(screen, gs)
-                                    p.draw.rect(screen, p.Color("blue"), p.Rect(sqSelected[1]*SQ_SIZE, sqSelected[0]*SQ_SIZE, SQ_SIZE, SQ_SIZE), 4)
+                                    drawGameState(screen, gs, flipped)
+                                    if not flipped:
+                                        p.draw.rect(screen, p.Color("blue"), p.Rect(sqSelected[1]*SQ_SIZE, sqSelected[0]*SQ_SIZE, SQ_SIZE, SQ_SIZE), 4)
+                                    else:
+                                        p.draw.rect(screen, p.Color("blue"), p.Rect(sqSelected[1]*SQ_SIZE, (DIMENSION - 1 - sqSelected[0])*SQ_SIZE, SQ_SIZE, SQ_SIZE), 4)
                                     for move in validMoves:
-                                        p.draw.rect(screen, p.Color("yellow"), p.Rect(move.endCol*SQ_SIZE, move.endRow*SQ_SIZE, SQ_SIZE, SQ_SIZE), 4)
+                                        if not flipped:
+                                            p.draw.rect(screen, p.Color("yellow"), p.Rect(move.endCol*SQ_SIZE, move.endRow*SQ_SIZE, SQ_SIZE, SQ_SIZE), 4)
+                                        else:
+                                            p.draw.rect(screen, p.Color("yellow"), p.Rect(move.endCol*SQ_SIZE, (DIMENSION - 1 - move.endRow)*SQ_SIZE, SQ_SIZE, SQ_SIZE), 4)
                                     break
-                                continue                               
+                                continue
+                            #Make the chosen move                               
                             print(validmove.getChessNotation())
                             gs.makeMove(validmove)
                             sqSelected = ()
                             validMoves = []
-                            drawGameState(screen, gs)
+                            drawGameState(screen, gs, flipped)
+                            if gs.info.winner != None:
+                                if gs.info.winner == 0:
+                                    print("Draw!")
+                                elif gs.info.winner == 1:
+                                    print("White wins!")
+                                else:
+                                    print("Black wins!")
                             break
                         i += 1
-                    continue
     
             elif e.type == p.KEYDOWN:
                 if e.key == p.K_z: # undo when 'z' is pressed
                     gs.undoMove()
                     sqSelected = ()
                     validMoves = []
-                    drawGameState(screen, gs)
+                    drawGameState(screen, gs, flipped)
+                    print("Undo move")
+                if e.key == p.K_f: # flip board when 'f' is pressed
+                    flipped = not flipped
+                    drawGameState(screen, gs, flipped)
+                    if sqSelected:
+                        if not flipped:
+                            p.draw.rect(screen, p.Color("blue"), p.Rect(sqSelected[1]*SQ_SIZE, sqSelected[0]*SQ_SIZE, SQ_SIZE, SQ_SIZE), 4)
+                        else:
+                            p.draw.rect(screen, p.Color("blue"), p.Rect(sqSelected[1]*SQ_SIZE, (DIMENSION - 1 - sqSelected[0])*SQ_SIZE, SQ_SIZE, SQ_SIZE), 4)
+                        for move in validMoves:
+                            if not flipped:
+                                p.draw.rect(screen, p.Color("yellow"), p.Rect(move.endCol*SQ_SIZE, move.endRow*SQ_SIZE, SQ_SIZE, SQ_SIZE), 4)
+                            else:
+                                p.draw.rect(screen, p.Color("yellow"), p.Rect(move.endCol*SQ_SIZE, (DIMENSION - 1 - move.endRow)*SQ_SIZE, SQ_SIZE, SQ_SIZE), 4)
         clock.tick(MAX_FPS)
         p.display.flip()
 
-def drawGameState(screen, gs):
-    drawBoard(screen) # draw squares on the board
-    drawPieces(screen, gs.board) # draw pieces on top of those squares
+def drawGameState(screen, gs, flipped=False):
+    drawBoard(screen, flipped) # draw squares on the board
+    drawPieces(screen, gs.board, flipped) # draw pieces on top of those squares
 
-def drawBoard(screen):
+def drawBoard(screen, flipped=False):
     colors = [p.Color("white"), p.Color("gray")]
     for r in range(DIMENSION):
         for c in range(DIMENSION):
             color = colors[((r + c) % 2)]
-            p.draw.rect(screen, color, p.Rect(c*SQ_SIZE, r*SQ_SIZE, SQ_SIZE, SQ_SIZE))
+            if flipped:
+                p.draw.rect(screen, color, p.Rect((DIMENSION - 1 - c)*SQ_SIZE, (DIMENSION - 1 - r)*SQ_SIZE, SQ_SIZE, SQ_SIZE))
+            else:
+                p.draw.rect(screen, color, p.Rect(c*SQ_SIZE, r*SQ_SIZE, SQ_SIZE, SQ_SIZE))
 
-def drawPieces(screen, board):
+def drawPieces(screen, board, flipped=False):
     for r in range(DIMENSION):
         for c in range(DIMENSION):
             piece = board[r][c]
             if piece != 0: # not an empty square
-                screen.blit(IMAGES[piece], p.Rect(c*SQ_SIZE, r*SQ_SIZE, SQ_SIZE, SQ_SIZE))
+                if not flipped:
+                    screen.blit(IMAGES[piece], p.Rect(c*SQ_SIZE, r*SQ_SIZE, SQ_SIZE, SQ_SIZE))
+                else:
+                    screen.blit(IMAGES[piece], p.Rect(c*SQ_SIZE, (DIMENSION - 1 - r)*SQ_SIZE, SQ_SIZE, SQ_SIZE))
                 
-def drawPromotionChoice(screen, gs, row, col, player):
+def drawPromotionChoice(screen, gs, row, col, player, flipped=False):
     color = p.Color("gray")
     promotionPieces = [5,4,3,2] # queen, rook, bishop, knight
     for i in range(4):
-        p.draw.rect(screen, color, p.Rect(col*SQ_SIZE, (row+i*player)*SQ_SIZE, SQ_SIZE, SQ_SIZE))
-        screen.blit(IMAGES[promotionPieces[i]*player], p.Rect(col*SQ_SIZE, (row+i*player)*SQ_SIZE, SQ_SIZE, SQ_SIZE))
+        if not flipped:
+            p.draw.rect(screen, color, p.Rect(col*SQ_SIZE, (row+i*player)*SQ_SIZE, SQ_SIZE, SQ_SIZE))
+            screen.blit(IMAGES[promotionPieces[i]*player], p.Rect(col*SQ_SIZE, (row+i*player)*SQ_SIZE, SQ_SIZE, SQ_SIZE))
+        else:
+            p.draw.rect(screen, color, p.Rect(col*SQ_SIZE, (DIMENSION - 1 - (row+i*player))*SQ_SIZE, SQ_SIZE, SQ_SIZE))
+            screen.blit(IMAGES[promotionPieces[i]*player], p.Rect(col*SQ_SIZE, (DIMENSION - 1 - (row+i*player))*SQ_SIZE, SQ_SIZE, SQ_SIZE))
     p.display.flip()
 
 if __name__ == "__main__":

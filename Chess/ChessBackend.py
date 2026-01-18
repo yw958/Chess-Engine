@@ -131,6 +131,11 @@ class GameState:
         self.player *= -1 # switch players
         self.updateKingSafety(self.player)
         self.updateAllValidMoves()
+        if not self.info.validMoves:
+            if self.info.inCheck[self.player]:
+                self.info.winner = -self.player # Checkmate
+            else:
+                self.info.winner = 0 # Stalemate (draw)
         
     def undoMove(self,steps = 1):
         for _ in range(steps):
@@ -285,16 +290,47 @@ class GameState:
                     currCol += directionCol
                 self.info.capture_mask[player].add((attackingPieceRow, attackingPieceCol))
                 
-    def updateAllValidMoves(self):
+    def updateAllValidMoves(self): #Generates all valid moves for the current player and detects dead positions
         self.info.validMoves = {}
         if self.info.winner is not None:
             return
+        pieces = []
+        possibleDead = True
+        bishopColorBlack = None
+        bishopColorWhite = None
         for r in range(8):
             for c in range(8):
-                if self.board[r][c] != 0 and (self.board[r][c] > 0) == (self.player > 0):
-                    moves = self.getValidMoves((r, c))
-                    if moves:
-                        self.info.validMoves[(r, c)] = moves
+                if self.board[r][c] != 0:
+                    if possibleDead:
+                        pieces.append(self.board[r][c])
+                        if len(pieces) > 4:
+                            possibleDead = False
+                        elif abs(self.board[r][c]) == 5 or abs(self.board[r][c]) ==4 or abs(self.board[r][c]) ==1:
+                            possibleDead = False
+                        elif self.board[r][c] == -3:
+                            bishopColorBlack = (r + c) % 2
+                        elif self.board[r][c] == 3:
+                            bishopColorWhite = (r + c) % 2
+                    if (self.board[r][c] > 0) == (self.player > 0):
+                        moves = self.getValidMoves((r, c))
+                        if moves:
+                            self.info.validMoves[(r, c)] = moves
+        #Check for dead position (insufficient material)
+        if possibleDead:
+            if len(pieces) == 2: #K vs K
+                self.info.winner = 0 # Draw
+                self.info.validMoves = {}
+            else:
+                pieces.sort()
+                # K vs K + N or K vs K + B
+                if len(pieces) == 3 and (pieces == [-6, 3, 6] or pieces == [-6, -3, 6] or pieces == [-6, 2, 6] or pieces == [-6, -2, 6]):
+                    self.info.winner = 0 # Draw
+                    self.info.validMoves = {}
+                # K + B vs K + B (both bishops on same color)
+                elif pieces == [-6, -3, 3, 6]:
+                    if bishopColorBlack == bishopColorWhite:
+                        self.info.winner = 0 # Draw
+                        self.info.validMoves = {}
     
     def getValidMoves(self, position):
         row, col = position
