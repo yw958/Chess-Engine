@@ -87,20 +87,48 @@ class GameState:
         self.updateAllValidMoves()
     
     def boardRepresentation(self):
-        lst = []
-        zeroCount = 0
-        for i in range(8):
-            for j in range(8):
-                piece = self.board[i][j]
-                if piece == 0:
-                    zeroCount += 1
+        # --- piece placement ---
+        ranks = []
+        for row in self.board:
+            parts = []
+            empty = 0
+            for sq in row:
+                if sq == 0:
+                    empty += 1
                 else:
-                    if zeroCount > 0:
-                        lst.append('(' + str(zeroCount) + ')')
-                    lst.append(str(piece))
-                    zeroCount = 0
-        lst.append('(' + str(zeroCount) + ')')
-        return ''.join(lst)     
+                    if empty:
+                        parts.append(str(empty))
+                        empty = 0
+                    parts.append(PIECES[abs(sq)])
+            if empty:
+                parts.append(str(empty))
+            ranks.append(''.join(parts))
+        placement = '/'.join(ranks)
+
+        # --- side to move ---
+        stm = 'w' if self.player == 1 else 'b'
+
+        # --- castling rights ---
+        # Your layout: castlingRights[index] = (kingside, queenside)
+        # index 1 -> white, index 2 -> black (since index 0 unused)
+        w_k, w_q = self.info.castlingRights[1]
+        b_k, b_q = self.info.castlingRights[2]
+        castle_parts = []
+        if w_k: castle_parts.append('K')
+        if w_q: castle_parts.append('Q')
+        if b_k: castle_parts.append('k')
+        if b_q: castle_parts.append('q')
+        castling = ''.join(castle_parts) if castle_parts else '-'
+
+        # --- en passant target square ---
+        # enPassantPossible is () or (row, col)
+        if self.info.enPassantPossible:
+            r, c = self.info.enPassantPossible
+            ep = f"{chr(ord('a') + c)}{8 - r}"
+        else:
+            ep = '-'
+
+        return f"{placement} {stm} {castling} {ep}"
         
     def makeMove(self, move: Move):
         if (move.pieceMoved > 0) != (self.player > 0):

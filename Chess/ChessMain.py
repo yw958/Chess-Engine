@@ -5,6 +5,7 @@ import pygame as p
 from Chess import ChessBackend
 from Chess import ChessEngine
 import os
+import time
 
 BOARD_WIDTH = BOARD_HEIGHT = 512
 MOVE_LOG_PANEL_WIDTH = 270
@@ -34,8 +35,9 @@ def main():
     sqSelected = () # no square is selected initially, keep track of the last click of the user (tuple: (row, col))
     validMoves = []
     flipped = False
+    engine = ChessEngine.Engine()
     engineEnabled = -1
-    engineDepth = 3
+    engineDepth = 5
     drawGameState(screen, gs, flipped)
     while running:
         for e in p.event.get():
@@ -47,7 +49,9 @@ def main():
                 row = location[1] // SQ_SIZE
                 if flipped:
                     row = DIMENSION - 1 - row               
-                if row >= DIMENSION or col >= DIMENSION:
+                if row >= DIMENSION or col >= DIMENSION: 
+                    if engineEnabled == gs.player and gs.info.winner == None:
+                        makeEngineMove(gs, screen, engine, flipped, engineDepth)
                     continue # click was outside the board
                 if not sqSelected: 
                     if gs.board[row][col] == 0 or (gs.board[row][col] > 0) != (gs.player > 0):
@@ -132,25 +136,7 @@ def main():
                                     print("Black wins!")
                             #Engine move
                             elif engineEnabled == gs.player:
-                                print("Engine is thinking...")
-                                engineMove = ChessEngine.findBestMove(gs, engineDepth)
-                                if engineMove is not None:
-                                    print(engineMove.getChessNotation())
-                                    gs.makeMove(engineMove)
-                                    drawGameState(screen, gs, flipped)
-                                    if not flipped:
-                                        p.draw.rect(screen, p.Color("red"), p.Rect(engineMove.endCol*SQ_SIZE, engineMove.endRow*SQ_SIZE, SQ_SIZE, SQ_SIZE), 4)
-                                        p.draw.rect(screen, p.Color("red"), p.Rect(engineMove.startCol*SQ_SIZE, engineMove.startRow*SQ_SIZE, SQ_SIZE, SQ_SIZE), 4)
-                                    else:
-                                        p.draw.rect(screen, p.Color("red"), p.Rect(engineMove.endCol*SQ_SIZE, (DIMENSION - 1 - engineMove.endRow)*SQ_SIZE, SQ_SIZE, SQ_SIZE), 4)
-                                        p.draw.rect(screen, p.Color("red"), p.Rect(engineMove.startCol*SQ_SIZE, (DIMENSION - 1 - engineMove.startRow)*SQ_SIZE, SQ_SIZE, SQ_SIZE), 4)
-                                if gs.info.winner != None:
-                                    if gs.info.winner == 0:
-                                        print("Draw!")
-                                    elif gs.info.winner == 1:
-                                        print("White wins!")
-                                    else:
-                                        print("Black wins!")
+                                makeEngineMove(gs, screen, engine, flipped, engineDepth)
                             break
                         i += 1
     
@@ -176,6 +162,29 @@ def main():
                                 p.draw.rect(screen, p.Color("yellow"), p.Rect(move.endCol*SQ_SIZE, (DIMENSION - 1 - move.endRow)*SQ_SIZE, SQ_SIZE, SQ_SIZE), 4)
         clock.tick(MAX_FPS)
         p.display.flip()
+
+def makeEngineMove(gs: ChessBackend.GameState, screen, engine: ChessEngine.Engine, flipped = False, engineDepth = 3):
+    print("Engine is thinking...")
+    statTime = time.time()
+    engineMove = engine.findBestMove(gs, engineDepth)
+    print("Engine move time: {:.2f} seconds".format(time.time() - statTime))
+    if engineMove is not None:
+        print(engineMove.getChessNotation())
+        gs.makeMove(engineMove)
+        drawGameState(screen, gs, flipped)
+        if not flipped:
+            p.draw.rect(screen, p.Color("red"), p.Rect(engineMove.endCol*SQ_SIZE, engineMove.endRow*SQ_SIZE, SQ_SIZE, SQ_SIZE), 4)
+            p.draw.rect(screen, p.Color("red"), p.Rect(engineMove.startCol*SQ_SIZE, engineMove.startRow*SQ_SIZE, SQ_SIZE, SQ_SIZE), 4)
+        else:
+            p.draw.rect(screen, p.Color("red"), p.Rect(engineMove.endCol*SQ_SIZE, (DIMENSION - 1 - engineMove.endRow)*SQ_SIZE, SQ_SIZE, SQ_SIZE), 4)
+            p.draw.rect(screen, p.Color("red"), p.Rect(engineMove.startCol*SQ_SIZE, (DIMENSION - 1 - engineMove.startRow)*SQ_SIZE, SQ_SIZE, SQ_SIZE), 4)
+    if gs.info.winner != None:
+        if gs.info.winner == 0:
+            print("Draw!")
+        elif gs.info.winner == 1:
+            print("White wins!")
+        else:
+            print("Black wins!")
 
 def drawGameState(screen, gs, flipped=False):
     drawBoard(screen, flipped) # draw squares on the board
