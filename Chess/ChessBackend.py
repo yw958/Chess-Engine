@@ -3,7 +3,7 @@ Responsible for storing all the information about the current state
 of the chess game. Also, be responsible for determining the valid moves at
 the current state. And it'll keep a move log.
 """
-PIECES = [None, 'P', 'N', 'B', 'R', 'Q', 'K']
+PIECES = [None, 'P', 'N', 'B', 'R', 'Q', 'K', 'k', 'q', 'r', 'b', 'n', 'p']
 VALUES = [0, 1, 3, 3, 5, 9, 0]
 
 class Move:
@@ -34,6 +34,9 @@ class Move:
             pieceChar = '' if abs(self.pieceMoved) == 1 else PIECES[abs(self.pieceMoved)]
             return f"{pieceChar}{chr(ord('a') + self.startCol)}x{chr(ord('a') + self.endCol)}{8 - self.endRow}"
         return f"{chr(ord('a') + self.startCol)}{8 - self.startRow} -> {chr(ord('a') + self.endCol)}{8 - self.endRow}"
+
+    def __str__(self):
+        return self.getChessNotation()
     
 class Info:
     def __init__(self):
@@ -99,7 +102,7 @@ class GameState:
                     if empty:
                         parts.append(str(empty))
                         empty = 0
-                    parts.append(PIECES[abs(sq)])
+                    parts.append(PIECES[sq])
             if empty:
                 parts.append(str(empty))
             ranks.append(''.join(parts))
@@ -235,7 +238,67 @@ class GameState:
         if reCalculateMoves:
             self.updateAllValidMoves()
     
+    # Return True if the square is attacked by opponent pieces
     def isAttacked(self, pieceRow, pieceCol, player):
+        #Check if attacked by knight
+        knightMoves = [(-2, -1), (-2, 1), (-1, -2), (-1, 2), (1, -2), (1, 2), (2, -1), (2, 1)]
+        for move in knightMoves:
+            endRow = pieceRow + move[0]
+            endCol = pieceCol + move[1]
+            if 0 <= endRow < 8 and 0 <= endCol < 8:
+                if self.board[endRow][endCol] == -2 * player:
+                    return True
+        #Check if attacked by bishop/queen (diagonal)
+        directions = [(-1, -1), (-1, 1), (1, -1), (1, 1)]
+        for direction in directions:
+            currRow, currCol = pieceRow, pieceCol
+            while True:
+                currRow += direction[0]
+                currCol += direction[1]
+                if 0 <= currRow < 8 and 0 <= currCol < 8:
+                    piece = self.board[currRow][currCol]
+                    if piece == 0:
+                        continue
+                    elif piece == -3 * player or piece == -5 * player:
+                        return True
+                    else:
+                        break
+                else:
+                    break
+        #Check if attacked by rook/queen (horizontal/vertical)
+        directions = [(-1, 0), (1, 0), (0, -1), (0, 1)]
+        for direction in directions:
+            currRow, currCol = pieceRow, pieceCol
+            while True:
+                currRow += direction[0]
+                currCol += direction[1]
+                if 0 <= currRow < 8 and 0 <= currCol < 8:
+                    piece = self.board[currRow][currCol]
+                    if piece == 0:
+                        continue
+                    elif piece == -4 * player or piece == -5 * player:
+                        return True
+                    else:
+                        break
+                else:
+                    break
+        #Check if attacked by pawn
+        if 0 <= pieceRow - player < 8:
+            if (0 <= pieceCol - 1 < 8 and self.board[pieceRow - player][pieceCol - 1] == -1 * player
+                ) or (0 <= pieceCol + 1 < 8 and self.board[pieceRow - player][pieceCol + 1] == -1 * player):
+                return True
+        #Check if attacked by king
+        kingMoves = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
+        for move in kingMoves:
+            endRow = pieceRow + move[0]
+            endCol = pieceCol + move[1]
+            if 0 <= endRow < 8 and 0 <= endCol < 8:
+                if self.board[endRow][endCol] == -6 * player:
+                    return True
+        return False
+    
+    #A more detailed version of isAttacked that also returns the attacking piece and its location
+    def findAttackers(self, pieceRow, pieceCol, player):
         #Check if attacked by pawn
         isAttacked = False
         attackingPiece = None
@@ -330,23 +393,11 @@ class GameState:
                         break
                 else:
                     break
-        #Check if attacked by king
-        kingMoves = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
-        for move in kingMoves:
-            endRow = pieceRow + move[0]
-            endCol = pieceCol + move[1]
-            if 0 <= endRow < 8 and 0 <= endCol < 8:
-                if self.board[endRow][endCol] == -6 * player:
-                    isAttacked = True
-                    attackingPiece = 6
-                    attackingPieceRow = endRow
-                    attackingPieceCol = endCol
-                    break
         return isAttacked, attackingPiece, attackingPieceRow, attackingPieceCol
     
     def updateKingSafety(self, player):
         kingRow, kingCol = self.info.kingLocations[player]
-        inCheck, attackingPiece, attackingPieceRow, attackingPieceCol = self.isAttacked(kingRow, kingCol, player)
+        inCheck, attackingPiece, attackingPieceRow, attackingPieceCol = self.findAttackers(kingRow, kingCol, player)
         self.info.inCheck[player] = inCheck
         self.info.block_mask[player] = set()
         self.info.capture_mask[player] = set()
@@ -435,7 +486,7 @@ class GameState:
             kingRow, kingCol = move.endRow, move.endCol
         else:
             kingRow, kingCol = self.info.kingLocations[player]
-        inCheck, _, _, _ = self.isAttacked(kingRow, kingCol, player)
+        inCheck = self.isAttacked(kingRow, kingCol, player)
         if move.isEnPassantMove:
             self.board[move.endRow + player][move.endCol] = move.pieceCaptured
             self.board[move.endRow][move.endCol] = 0
@@ -574,13 +625,13 @@ class GameState:
         if not self.info.inCheck[player]:
             if self.info.castlingRights[player][0]: #king side
                 if self.board[row][col + 1] == 0 and self.board[row][col + 2] == 0:
-                    if not self.isAttacked(row, col + 1, player)[0] and not self.isAttacked(row, col + 2, player)[0]:
+                    if not self.isAttacked(row, col + 1, player) and not self.isAttacked(row, col + 2, player):
                         move = Move((row, col), (row, col + 2), self.board)
                         move.isCastlingMove = True
                         moves.append(move)
             if self.info.castlingRights[player][1]: #queen side
                 if self.board[row][col - 1] == 0 and self.board[row][col - 2] == 0 and self.board[row][col - 3] == 0:
-                    if not self.isAttacked(row, col - 1, player)[0] and not self.isAttacked(row, col - 2, player)[0]:
+                    if not self.isAttacked(row, col - 1, player) and not self.isAttacked(row, col - 2, player):
                         move = Move((row, col), (row, col - 2), self.board)
                         move.isCastlingMove = True
                         moves.append(move)

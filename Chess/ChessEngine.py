@@ -18,16 +18,16 @@ class Engine:
             [1, 1, 1, 1, 1, 1, 1, 1],
         ]
 
-        # self.bishopScores = [
-        #     [4, 3, 2, 1, 1, 2, 3, 4],
-        #     [3, 4, 3, 2, 2, 3, 4, 3],
-        #     [2, 3, 4, 3, 3, 4, 3, 2],
-        #     [1, 2, 3, 4, 4, 3, 2, 1],
-        #     [1, 2, 3, 4, 4, 3, 2, 1],
-        #     [2, 3, 4, 3, 3, 4, 3, 2],
-        #     [3, 4, 3, 2, 2, 3, 4, 3],
-        #     [4, 3, 2, 1, 1, 2, 3, 4],
-        # ]
+        self.bishopScores = [
+            [4, 3, 2, 1, 1, 2, 3, 4],
+            [3, 4, 3, 2, 2, 3, 4, 3],
+            [2, 3, 4, 3, 3, 4, 3, 2],
+            [1, 2, 3, 4, 4, 3, 2, 1],
+            [1, 2, 3, 4, 4, 3, 2, 1],
+            [2, 3, 4, 3, 3, 4, 3, 2],
+            [3, 4, 3, 2, 2, 3, 4, 3],
+            [4, 3, 2, 1, 1, 2, 3, 4],
+        ]
 
         self.queenScores = [
             [1, 1, 1, 3, 1, 1, 1, 1],
@@ -158,6 +158,8 @@ class Engine:
                 value += self.blackPawnScores[move.endRow][move.endCol] - self.blackPawnScores[move.startRow][move.startCol]
             elif abs(move.pieceMoved) == 2:
                 value += self.knightScores[move.endRow][move.endCol] - self.knightScores[move.startRow][move.startCol]
+            elif abs(move.pieceMoved) == 3:
+                value += self.bishopScores[move.endRow][move.endCol] - self.bishopScores[move.startRow][move.startCol]
             elif abs(move.pieceMoved) == 4:
                 value += self.rookScores[move.endRow][move.endCol] - self.rookScores[move.startRow][move.startCol]
             elif abs(move.pieceMoved) == 5:
