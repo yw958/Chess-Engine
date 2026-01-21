@@ -37,12 +37,22 @@ def main():
     flipped = False
     engine = ChessEngine.Engine()
     engineEnabled = 0
-    engineDepth = 5
+    engineDepth = 6
     moveLogFont = p.font.SysFont("Arail", 20, False, False)
     drawGameState(screen, gs, flipped, moveLogFont)
     while running:
         if engineEnabled == gs.player and gs.info.winner == None:
             makeEngineMove(gs, screen, engine, flipped, engineDepth, moveLogFont)
+            if gs.info.winner != None:
+                text = ""
+                if gs.info.winner == 0:
+                    text = "Draw!"
+                elif gs.info.winner == 1:
+                    text = "White wins!"
+                else:
+                    text = "Black wins!"
+                print(text)
+                drawEndGameText(screen, text)
         for e in p.event.get():
             if e.type == p.QUIT:
                 running = False
@@ -116,12 +126,15 @@ def main():
                             validMoves = []
                             drawGameState(screen, gs, flipped, moveLogFont)
                             if gs.info.winner != None:
+                                text = ""
                                 if gs.info.winner == 0:
-                                    print("Draw!")
+                                    text = "Draw!"
                                 elif gs.info.winner == 1:
-                                    print("White wins!")
+                                    text = "White wins!"
                                 else:
-                                    print("Black wins!")
+                                    text = "Black wins!"
+                                print(text)
+                                drawEndGameText(screen, text)
                             break
                         i += 1
     
@@ -245,6 +258,17 @@ def drawMoveLog(screen, gs:ChessBackend.GameState, font):
         textLocation = moveLogRect.move(padding, textY)
         screen.blit(textObject, textLocation)
         textY += textObject.get_height() + lineSpacing
+        
+def drawEndGameText(screen, text):
+    font = p.font.SysFont("Helvitca", 32, True, False)
+    textObject = font.render(text, 0, p.Color("Gray"))
+    textLocation = p.Rect(0, 0, BOARD_WIDTH, BOARD_HEIGHT).move(
+        BOARD_WIDTH / 2 - textObject.get_width() / 2,
+        BOARD_HEIGHT / 2 - textObject.get_height() / 2,
+    )
+    screen.blit(textObject, textLocation)
+    textObject = font.render(text, 0, p.Color("Black"))
+    screen.blit(textObject, textLocation.move(2, 2))
 
 if __name__ == "__main__":
     main()
