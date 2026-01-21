@@ -76,7 +76,7 @@ class Engine:
         self.memo = {}
 
     def miniMax(self, gameState: ChessBackend.GameState, depth: int, alpha: float, beta: float, player) -> float:
-        boardRep = gameState.boardRepresentation()
+        boardRep = gameState.boardHistory[-1]
         if (boardRep, depth) in self.memo:
             return self.memo[(boardRep, depth)]
         if depth == 0 or gameState.info.winner is not None:
@@ -116,7 +116,7 @@ class Engine:
                 self.memo[(boardRep, depth)] = minEval
             return minEval
     
-    def findBestMove(self,gameState: ChessBackend.GameState, depth: int = 3) -> ChessBackend.Move:
+    def findBestMove(self,gameState: ChessBackend.GameState, depth: int) -> ChessBackend.Move:
         bestMove = None
         allMoves = []
         for moves in gameState.info.validMoves.values():

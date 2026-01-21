@@ -174,14 +174,14 @@ class GameState:
             self.info.seventyFiveMoveRuleCounter += 1
         if self.info.seventyFiveMoveRuleCounter >= 150:
             self.info.winner = 0 # Draw by 75-move rule
+        self.player *= -1 # switch players
         boardRepresentation = self.boardRepresentation()
         count = self.boardCounter.get(boardRepresentation, 0)
         count += 1
         self.boardCounter[boardRepresentation] = count
         if count >= 5:
             self.info.winner = 0 # Draw by fivefold repetition
-        self.boardHistory.append(boardRepresentation)
-        self.player *= -1 # switch players
+        self.boardHistory.append(boardRepresentation)     
         self.updateKingSafety(self.player)
         self.updateAllValidMoves()
         if not self.info.validMoves:
