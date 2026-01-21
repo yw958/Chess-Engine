@@ -1,9 +1,7 @@
 """
-A module containing the minimax algorithm with alpha-beta pruning for chess.
+Contains the chess engine implementing a negamax algorithm with alpha-beta pruning
 """
-
-
-from Chess import ChessBackend
+import ChessBackend
 
 class Engine:
     def __init__(self):
@@ -75,72 +73,62 @@ class Engine:
 
         self.memo = {}
 
-    def miniMax(self, gameState: ChessBackend.GameState, depth: int, alpha: float, beta: float, player) -> float:
+    def negamax(self, gameState: ChessBackend.GameState, depth: int, alpha: float, beta: float, color: int) -> float:
+        """
+        Negamax with alpha-beta pruning.
+        `color` = +1 if we want evaluation from White perspective,
+                -1 if from Black perspective,
+        assuming gameState.info.eval is positive for White.
+        """
         boardRep = gameState.boardHistory[-1]
+        pruned = False
         if (boardRep, depth) in self.memo:
             return self.memo[(boardRep, depth)]
         if depth == 0 or gameState.info.winner is not None:
-            self.memo[(boardRep, depth)] = gameState.info.eval
-            return gameState.info.eval
+            val = color * gameState.info.eval
+            self.memo[(boardRep, depth)] = val
+            return val
         allMoves = []
-        pruned = False
         for moves in gameState.info.validMoves.values():
             allMoves += moves
         self.sortMoves(allMoves)
-        if player == 1:
-            maxEval = float('-inf')
-            for move in allMoves:
-                gameState.makeMove(move)
-                eval = self.miniMax(gameState, depth - 1, alpha, beta, -1)
-                gameState.undoMove(reCalculateMoves=False)
-                maxEval = max(maxEval, eval)
-                alpha = max(alpha, eval)
-                if beta <= alpha:
-                    pruned = True
-                    break
-            if not pruned:
-                self.memo[(boardRep, depth)] = maxEval
-            return maxEval
-        else:
-            minEval = float('inf')
-            for move in allMoves:
-                gameState.makeMove(move)
-                eval = self.miniMax(gameState, depth - 1, alpha, beta, 1)
-                gameState.undoMove(reCalculateMoves=False)
-                minEval = min(minEval, eval)
-                beta = min(beta, eval)
-                if beta <= alpha:
-                    pruned = True
-                    break
-            if not pruned:
-                self.memo[(boardRep, depth)] = minEval
-            return minEval
-    
-    def findBestMove(self,gameState: ChessBackend.GameState, depth: int) -> ChessBackend.Move:
+        best = float("-inf")
+        a = alpha
+        for move in allMoves:
+            gameState.makeMove(move)
+            score = -self.negamax(gameState, depth - 1, -beta, -a, -color)
+            gameState.undoMove(reCalculateMoves=False)
+            if score > best:
+                best = score
+            if score > a:
+                a = score
+            if a >= beta:
+                pruned = True
+                break  # prune
+        if not pruned:
+            self.memo[(boardRep, depth)] = best
+        return best
+
+    def findBestMove(self, gameState: ChessBackend.GameState, depth: int) -> ChessBackend.Move:
         bestMove = None
         allMoves = []
         for moves in gameState.info.validMoves.values():
             allMoves += moves
         self.sortMoves(allMoves)
-        if gameState.player == 1:
-            maxEval = float('-inf')
-            for move in allMoves:
-                gameState.makeMove(move)
-                eval = self.miniMax(gameState, depth - 1, float('-inf'), float('inf'), -1)
-                gameState.undoMove(reCalculateMoves=False)
-                if eval > maxEval:
-                    maxEval = eval
-                    bestMove = move
-        else:
-            minEval = float('inf')
-            for move in allMoves:
-                gameState.makeMove(move)
-                eval = self.miniMax(gameState, depth - 1, float('-inf'), float('inf'), 1)
-                gameState.undoMove(reCalculateMoves=False)
-                if eval < minEval:
-                    minEval = eval
-                    bestMove = move
-        if bestMove is None: # Mate in a few steps
+        # color based on who's to move at root
+        color = 1 if gameState.player == 1 else -1
+        bestScore = float("-inf")
+        alpha, beta = float("-inf"), float("inf")
+        for move in allMoves:
+            gameState.makeMove(move)
+            score = -self.negamax(gameState, depth - 1, -beta, -alpha, -color)
+            gameState.undoMove(reCalculateMoves=False)
+            if score > bestScore:
+                bestScore = score
+                bestMove = move
+            if score > alpha:
+                alpha = score  # root alpha update (optional but helps)
+        if bestMove is None and allMoves:
             bestMove = allMoves[0]
         return bestMove
 

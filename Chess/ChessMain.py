@@ -1,9 +1,9 @@
 """
-Handles user input and displaying the current GameState object.
+User interface for the chess game, handling graphics and user interactions.
 """
 import pygame as p
-from Chess import ChessBackend
-from Chess import ChessEngine
+import ChessBackend
+import ChessEngine
 import os
 import time
 
@@ -36,8 +36,8 @@ def main():
     validMoves = []
     flipped = False
     engine = ChessEngine.Engine()
-    engineEnabled = -1
-    engineDepth = 3
+    engineEnabled = 0
+    engineDepth = 5
     moveLogFont = p.font.SysFont("Arail", 20, False, False)
     drawGameState(screen, gs, flipped, moveLogFont)
     while running:
@@ -51,23 +51,17 @@ def main():
                 col = location[0] // SQ_SIZE
                 row = location[1] // SQ_SIZE
                 if flipped:
-                    row = DIMENSION - 1 - row               
+                    row = DIMENSION - 1 - row
+                    col = DIMENSION - 1 - col               
                 if row >= DIMENSION or col >= DIMENSION: 
                     continue # click was outside the board
                 if not sqSelected: 
                     if gs.board[row][col] == 0 or (gs.board[row][col] > 0) != (gs.player > 0):
                         continue # clicked on an empty square without having selected a piece
                     sqSelected = (row, col)
-                    if not flipped:
-                        p.draw.rect(screen, p.Color("blue"), p.Rect(col*SQ_SIZE, row*SQ_SIZE, SQ_SIZE, SQ_SIZE), 4)
-                    else:
-                        p.draw.rect(screen, p.Color("blue"), p.Rect(col*SQ_SIZE, (DIMENSION - 1 - row)*SQ_SIZE, SQ_SIZE, SQ_SIZE), 4)
+                    drawSelectedSquare(screen, row, col, flipped)
                     validMoves = gs.info.validMoves.get((row, col), [])
-                    for move in validMoves:
-                        if not flipped:
-                            p.draw.rect(screen, p.Color("yellow"), p.Rect(move.endCol*SQ_SIZE, move.endRow*SQ_SIZE, SQ_SIZE, SQ_SIZE), 4)
-                        else:
-                            p.draw.rect(screen, p.Color("yellow"), p.Rect(move.endCol*SQ_SIZE, (DIMENSION - 1 - move.endRow)*SQ_SIZE, SQ_SIZE, SQ_SIZE), 4)
+                    drawHighlightedSquares(screen, validMoves, flipped)
                 else:
                     if (row, col) == sqSelected: # user clicked the same square twice
                         sqSelected = () # deselect
@@ -78,9 +72,8 @@ def main():
                         sqSelected = (row, col)
                         validMoves = gs.info.validMoves.get((row, col), [])
                         drawGameState(screen, gs, flipped, moveLogFont)
-                        p.draw.rect(screen, p.Color("blue"), p.Rect(col*SQ_SIZE, row*SQ_SIZE, SQ_SIZE, SQ_SIZE), 4)
-                        for move in validMoves:
-                            p.draw.rect(screen, p.Color("yellow"), p.Rect(move.endCol*SQ_SIZE, move.endRow*SQ_SIZE, SQ_SIZE, SQ_SIZE), 4)
+                        drawSelectedSquare(screen, row, col, flipped)
+                        drawHighlightedSquares(screen, validMoves, flipped)
                         continue
                     i = 0
                     promotionChosen = False
@@ -101,6 +94,7 @@ def main():
                                             c = location[0] // SQ_SIZE
                                             if flipped:
                                                 r = DIMENSION - 1 - r
+                                                c = DIMENSION - 1 - c
                                             if c == col and abs(row - r) < 4:
                                                 promotionChoice = abs(row - r)
                                                 choosing = False
@@ -111,15 +105,8 @@ def main():
                                                 reselect = True
                                 if reselect:
                                     drawGameState(screen, gs, flipped, moveLogFont)
-                                    if not flipped:
-                                        p.draw.rect(screen, p.Color("blue"), p.Rect(sqSelected[1]*SQ_SIZE, sqSelected[0]*SQ_SIZE, SQ_SIZE, SQ_SIZE), 4)
-                                    else:
-                                        p.draw.rect(screen, p.Color("blue"), p.Rect(sqSelected[1]*SQ_SIZE, (DIMENSION - 1 - sqSelected[0])*SQ_SIZE, SQ_SIZE, SQ_SIZE), 4)
-                                    for move in validMoves:
-                                        if not flipped:
-                                            p.draw.rect(screen, p.Color("yellow"), p.Rect(move.endCol*SQ_SIZE, move.endRow*SQ_SIZE, SQ_SIZE, SQ_SIZE), 4)
-                                        else:
-                                            p.draw.rect(screen, p.Color("yellow"), p.Rect(move.endCol*SQ_SIZE, (DIMENSION - 1 - move.endRow)*SQ_SIZE, SQ_SIZE, SQ_SIZE), 4)
+                                    drawSelectedSquare(screen, sqSelected[0], sqSelected[1], flipped)
+                                    drawHighlightedSquares(screen, validMoves, flipped)
                                     break
                                 continue
                             #Make the chosen move                               
@@ -151,15 +138,14 @@ def main():
                     flipped = not flipped
                     drawGameState(screen, gs, flipped, moveLogFont)
                     if sqSelected:
-                        if not flipped:
-                            p.draw.rect(screen, p.Color("blue"), p.Rect(sqSelected[1]*SQ_SIZE, sqSelected[0]*SQ_SIZE, SQ_SIZE, SQ_SIZE), 4)
-                        else:
-                            p.draw.rect(screen, p.Color("blue"), p.Rect(sqSelected[1]*SQ_SIZE, (DIMENSION - 1 - sqSelected[0])*SQ_SIZE, SQ_SIZE, SQ_SIZE), 4)
-                        for move in validMoves:
-                            if not flipped:
-                                p.draw.rect(screen, p.Color("yellow"), p.Rect(move.endCol*SQ_SIZE, move.endRow*SQ_SIZE, SQ_SIZE, SQ_SIZE), 4)
-                            else:
-                                p.draw.rect(screen, p.Color("yellow"), p.Rect(move.endCol*SQ_SIZE, (DIMENSION - 1 - move.endRow)*SQ_SIZE, SQ_SIZE, SQ_SIZE), 4)
+                        drawSelectedSquare(screen, sqSelected[0], sqSelected[1], flipped)
+                        drawHighlightedSquares(screen, validMoves, flipped)
+                if e.key == p.K_e: # toggle engine when 'e' is pressed
+                    engineEnabled = gs.player
+                    print("Engine enabled for player {}".format("White" if engineEnabled == 1 else "Black"))
+                if e.key == p.K_d: # disable engine when 'd' is pressed
+                    engineEnabled = 0
+                    print("Engine disabled")
         clock.tick(MAX_FPS)
         p.display.flip()
 
@@ -176,8 +162,8 @@ def makeEngineMove(gs: ChessBackend.GameState, screen, engine: ChessEngine.Engin
             p.draw.rect(screen, p.Color("red"), p.Rect(engineMove.endCol*SQ_SIZE, engineMove.endRow*SQ_SIZE, SQ_SIZE, SQ_SIZE), 4)
             p.draw.rect(screen, p.Color("red"), p.Rect(engineMove.startCol*SQ_SIZE, engineMove.startRow*SQ_SIZE, SQ_SIZE, SQ_SIZE), 4)
         else:
-            p.draw.rect(screen, p.Color("red"), p.Rect(engineMove.endCol*SQ_SIZE, (DIMENSION - 1 - engineMove.endRow)*SQ_SIZE, SQ_SIZE, SQ_SIZE), 4)
-            p.draw.rect(screen, p.Color("red"), p.Rect(engineMove.startCol*SQ_SIZE, (DIMENSION - 1 - engineMove.startRow)*SQ_SIZE, SQ_SIZE, SQ_SIZE), 4)
+            p.draw.rect(screen, p.Color("red"), p.Rect((DIMENSION - 1 - engineMove.endCol)*SQ_SIZE, (DIMENSION - 1 - engineMove.endRow)*SQ_SIZE, SQ_SIZE, SQ_SIZE), 4)
+            p.draw.rect(screen, p.Color("red"), p.Rect((DIMENSION - 1 - engineMove.startCol)*SQ_SIZE, (DIMENSION - 1 - engineMove.startRow)*SQ_SIZE, SQ_SIZE, SQ_SIZE), 4)
     if gs.info.winner != None:
         if gs.info.winner == 0:
             print("Draw!")
@@ -209,7 +195,7 @@ def drawPieces(screen, board, flipped=False):
                 if not flipped:
                     screen.blit(IMAGES[piece], p.Rect(c*SQ_SIZE, r*SQ_SIZE, SQ_SIZE, SQ_SIZE))
                 else:
-                    screen.blit(IMAGES[piece], p.Rect(c*SQ_SIZE, (DIMENSION - 1 - r)*SQ_SIZE, SQ_SIZE, SQ_SIZE))
+                    screen.blit(IMAGES[piece], p.Rect((DIMENSION - 1 - c)*SQ_SIZE, (DIMENSION - 1 - r)*SQ_SIZE, SQ_SIZE, SQ_SIZE))
                 
 def drawPromotionChoice(screen, gs, row, col, player, flipped=False):
     color = p.Color("gray")
@@ -219,9 +205,22 @@ def drawPromotionChoice(screen, gs, row, col, player, flipped=False):
             p.draw.rect(screen, color, p.Rect(col*SQ_SIZE, (row+i*player)*SQ_SIZE, SQ_SIZE, SQ_SIZE))
             screen.blit(IMAGES[promotionPieces[i]*player], p.Rect(col*SQ_SIZE, (row+i*player)*SQ_SIZE, SQ_SIZE, SQ_SIZE))
         else:
-            p.draw.rect(screen, color, p.Rect(col*SQ_SIZE, (DIMENSION - 1 - (row+i*player))*SQ_SIZE, SQ_SIZE, SQ_SIZE))
-            screen.blit(IMAGES[promotionPieces[i]*player], p.Rect(col*SQ_SIZE, (DIMENSION - 1 - (row+i*player))*SQ_SIZE, SQ_SIZE, SQ_SIZE))
+            p.draw.rect(screen, color, p.Rect((DIMENSION - 1 - col)*SQ_SIZE, (DIMENSION - 1 - (row+i*player))*SQ_SIZE, SQ_SIZE, SQ_SIZE))
+            screen.blit(IMAGES[promotionPieces[i]*player], p.Rect((DIMENSION - 1 - col)*SQ_SIZE, (DIMENSION - 1 - (row+i*player))*SQ_SIZE, SQ_SIZE, SQ_SIZE))
     p.display.flip()
+
+def drawSelectedSquare(screen, row, col, flipped=False):
+    if not flipped:
+        p.draw.rect(screen, p.Color("blue"), p.Rect(col*SQ_SIZE, row*SQ_SIZE, SQ_SIZE, SQ_SIZE), 4)
+    else:
+        p.draw.rect(screen, p.Color("blue"), p.Rect((DIMENSION - 1 - col)*SQ_SIZE, (DIMENSION - 1 - row)*SQ_SIZE, SQ_SIZE, SQ_SIZE), 4)
+
+def drawHighlightedSquares(screen, moves: list[ChessBackend.Move], flipped=False):
+    for move in moves:
+        if not flipped:
+            p.draw.rect(screen, p.Color("yellow"), p.Rect(move.endCol*SQ_SIZE, move.endRow*SQ_SIZE, SQ_SIZE, SQ_SIZE), 4)
+        else:
+            p.draw.rect(screen, p.Color("yellow"), p.Rect((DIMENSION - 1 - move.endCol)*SQ_SIZE, (DIMENSION - 1 - move.endRow)*SQ_SIZE, SQ_SIZE, SQ_SIZE), 4)
 
 def drawMoveLog(screen, gs:ChessBackend.GameState, font):
     moveLogRect = p.Rect(BOARD_WIDTH, 0, MOVE_LOG_PANEL_WIDTH, MOVE_LOG_PANEL_HEIGHT)

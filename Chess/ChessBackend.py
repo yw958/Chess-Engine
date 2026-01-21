@@ -1,7 +1,6 @@
 """
-Responsible for storing all the information about the current state
-of the chess game. Also, be responsible for determining the valid moves at
-the current state. And it'll keep a move log.
+Contains the core logic for representing the chess game state, making and undoing moves,
+and generating valid moves.
 """
 PIECES = [None, 'P', 'N', 'B', 'R', 'Q', 'K', 'k', 'q', 'r', 'b', 'n', 'p']
 VALUES = [0, 1, 3, 3, 5, 9, 0]
@@ -584,6 +583,8 @@ class GameState:
                             move = Move((row, col), (currRow, currCol), self.board)
                             if self.checkMoveSafety(move, player):
                                 moves.append(move)
+                            break
+                        if self.board[currRow][currCol] * player < 0:
                             break
                     else:
                         break
