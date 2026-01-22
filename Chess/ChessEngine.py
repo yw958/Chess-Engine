@@ -70,7 +70,8 @@ class Engine:
             [8, 8, 8, 8, 8, 8, 8, 8],
             [8, 8, 8, 8, 8, 8, 8, 8],
         ]
-
+        self.nodesSearched = 0
+        self.nodesFromMemo = 0
         self.memo = {}
 
     def negamax(self, gameState: ChessBackend.GameState, depth: int, alpha: float, beta: float, color: int) -> float:
@@ -83,10 +84,12 @@ class Engine:
         boardRep = gameState.boardHistory[-1]
         pruned = False
         if (boardRep, depth) in self.memo:
+            self.nodesFromMemo += 1
             return self.memo[(boardRep, depth)]
         if depth == 0 or gameState.info.winner is not None:
             val = color * gameState.info.eval
             self.memo[(boardRep, depth)] = val
+            self.nodesSearched += 1
             return val
         allMoves = []
         for moves in gameState.info.validMoves.values():
@@ -107,16 +110,19 @@ class Engine:
                 break  # prune
         if not pruned:
             self.memo[(boardRep, depth)] = best
+        self.nodesSearched += 1
         return best
 
     def findBestMove(self, gameState: ChessBackend.GameState, depth: int) -> ChessBackend.Move:
         bestMove = None
         allMoves = []
+        self.nodesSearched = 0
+        self.nodesFromMemo = 0
         for moves in gameState.info.validMoves.values():
             allMoves += moves
         self.sortMoves(allMoves)
         # color based on who's to move at root
-        color = 1 if gameState.player == 1 else -1
+        color = gameState.player
         bestScore = float("-inf")
         alpha, beta = float("-inf"), float("inf")
         for move in allMoves:
@@ -130,6 +136,7 @@ class Engine:
                 alpha = score  # root alpha update (optional but helps)
         if bestMove is None and allMoves:
             bestMove = allMoves[0]
+        print(f"Nodes searched: {self.nodesSearched}, from memo: {self.nodesFromMemo}")
         return bestMove
 
     def sortMoves(self, moves: list[ChessBackend.Move]):

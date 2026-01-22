@@ -25,3 +25,4 @@ The backend logic is original with a significant performance boost compared to t
 ## Future Improvements
 - Implement engine in C++ for performance enhancement, and connect via pybind11.
 - Try Monte Carlo Tree Search (MCTS) for move selection.
+- Optimize move ordering for better alpha-beta pruning efficiency by enabling moves to have check flag.
