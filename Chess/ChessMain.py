@@ -180,13 +180,8 @@ def makeEngineMove(gs: ChessBackend.GameState, screen, engine: ChessEngine.Engin
         else:
             p.draw.rect(screen, p.Color("red"), p.Rect((DIMENSION - 1 - engineMove.endCol)*SQ_SIZE, (DIMENSION - 1 - engineMove.endRow)*SQ_SIZE, SQ_SIZE, SQ_SIZE), 4)
             p.draw.rect(screen, p.Color("red"), p.Rect((DIMENSION - 1 - engineMove.startCol)*SQ_SIZE, (DIMENSION - 1 - engineMove.startRow)*SQ_SIZE, SQ_SIZE, SQ_SIZE), 4)
-    if gs.info.winner != None:
-        if gs.info.winner == 0:
-            print("Draw!")
-        elif gs.info.winner == 1:
-            print("White wins!")
-        else:
-            print("Black wins!")
+    else:
+        print("No valid moves found by engine!")
 
 def drawGameState(screen, gs, flipped = False, moveLogFont = None, engineStatus=0):
     drawBoard(screen, flipped) # draw squares on the board
