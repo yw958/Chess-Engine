@@ -39,10 +39,10 @@ def main():
     engineEnabled = 0
     engineDepth = 5
     moveLogFont = p.font.SysFont("Arail", 20, False, False)
-    drawGameState(screen, gs, flipped, moveLogFont)
+    drawGameState(screen, gs, flipped, moveLogFont, engineEnabled)
     while running:
         if engineEnabled == gs.player and gs.info.winner == None:
-            makeEngineMove(gs, screen, engine, flipped, engineDepth, moveLogFont)
+            makeEngineMove(gs, screen, engine, flipped, engineDepth, moveLogFont, engineEnabled)
             if gs.info.winner != None:
                 text = ""
                 if gs.info.winner == 0:
@@ -76,12 +76,12 @@ def main():
                     if (row, col) == sqSelected: # user clicked the same square twice
                         sqSelected = () # deselect
                         validMoves = []
-                        drawGameState(screen, gs, flipped, moveLogFont)
+                        drawGameState(screen, gs, flipped, moveLogFont, engineEnabled)
                         continue
                     if gs.board[row][col] != 0 and (gs.board[row][col] > 0) == (gs.player > 0):
                         sqSelected = (row, col)
                         validMoves = gs.info.validMoves.get((row, col), [])
-                        drawGameState(screen, gs, flipped, moveLogFont)
+                        drawGameState(screen, gs, flipped, moveLogFont, engineEnabled)
                         drawSelectedSquare(screen, row, col, flipped)
                         drawHighlightedSquares(screen, validMoves, flipped)
                         continue
@@ -114,7 +114,7 @@ def main():
                                                 choosing = False
                                                 reselect = True
                                 if reselect:
-                                    drawGameState(screen, gs, flipped, moveLogFont)
+                                    drawGameState(screen, gs, flipped, moveLogFont, engineEnabled)
                                     drawSelectedSquare(screen, sqSelected[0], sqSelected[1], flipped)
                                     drawHighlightedSquares(screen, validMoves, flipped)
                                     break
@@ -124,7 +124,7 @@ def main():
                             gs.makeMove(validmove)
                             sqSelected = ()
                             validMoves = []
-                            drawGameState(screen, gs, flipped, moveLogFont)
+                            drawGameState(screen, gs, flipped, moveLogFont, engineEnabled)
                             if gs.info.winner != None:
                                 text = ""
                                 if gs.info.winner == 0:
@@ -145,16 +145,17 @@ def main():
                         gs.undoMove()
                     sqSelected = ()
                     validMoves = []
-                    drawGameState(screen, gs, flipped, moveLogFont)
+                    drawGameState(screen, gs, flipped, moveLogFont, engineEnabled)
                     print("Undo move")
                 if e.key == p.K_f: # flip board when 'f' is pressed
                     flipped = not flipped
-                    drawGameState(screen, gs, flipped, moveLogFont)
+                    drawGameState(screen, gs, flipped, moveLogFont, engineEnabled)
                     if sqSelected:
                         drawSelectedSquare(screen, sqSelected[0], sqSelected[1], flipped)
                         drawHighlightedSquares(screen, validMoves, flipped)
                 if e.key == p.K_e: # toggle engine when 'e' is pressed
                     engineEnabled = gs.player
+                    drawMoveLog(screen, gs, moveLogFont, engineEnabled)
                     print("Engine enabled for player {}".format("White" if engineEnabled == 1 else "Black"))
                 if e.key == p.K_d: # disable engine when 'd' is pressed
                     engineEnabled = 0
@@ -162,7 +163,7 @@ def main():
         clock.tick(MAX_FPS)
         p.display.flip()
 
-def makeEngineMove(gs: ChessBackend.GameState, screen, engine: ChessEngine.Engine, flipped = False, engineDepth = 3, moveLogFont = None):
+def makeEngineMove(gs: ChessBackend.GameState, screen, engine: ChessEngine.Engine, flipped = False, engineDepth = 3, moveLogFont = None, engineEnabled = 0):
     print("Engine is thinking...")
     statTime = time.time()
     engineMove = engine.findBestMove(gs, engineDepth)
@@ -172,7 +173,7 @@ def makeEngineMove(gs: ChessBackend.GameState, screen, engine: ChessEngine.Engin
     if engineMove is not None:
         print(engineMove.getChessNotation())
         gs.makeMove(engineMove)
-        drawGameState(screen, gs, flipped, moveLogFont)
+        drawGameState(screen, gs, flipped, moveLogFont, engineEnabled)
         if not flipped:
             p.draw.rect(screen, p.Color("red"), p.Rect(engineMove.endCol*SQ_SIZE, engineMove.endRow*SQ_SIZE, SQ_SIZE, SQ_SIZE), 4)
             p.draw.rect(screen, p.Color("red"), p.Rect(engineMove.startCol*SQ_SIZE, engineMove.startRow*SQ_SIZE, SQ_SIZE, SQ_SIZE), 4)
@@ -187,10 +188,10 @@ def makeEngineMove(gs: ChessBackend.GameState, screen, engine: ChessEngine.Engin
         else:
             print("Black wins!")
 
-def drawGameState(screen, gs, flipped = False, moveLogFont = None):
+def drawGameState(screen, gs, flipped = False, moveLogFont = None, engineStatus=0):
     drawBoard(screen, flipped) # draw squares on the board
     drawPieces(screen, gs.board, flipped) # draw pieces on top of those squares
-    drawMoveLog(screen, gs, moveLogFont)
+    drawMoveLog(screen, gs, moveLogFont, engineStatus)
 
 def drawBoard(screen, flipped=False):
     colors = [p.Color("white"), p.Color("gray")]
@@ -237,11 +238,48 @@ def drawHighlightedSquares(screen, moves: list[ChessBackend.Move], flipped=False
         else:
             p.draw.rect(screen, p.Color("yellow"), p.Rect((DIMENSION - 1 - move.endCol)*SQ_SIZE, (DIMENSION - 1 - move.endRow)*SQ_SIZE, SQ_SIZE, SQ_SIZE), 4)
 
-def drawMoveLog(screen, gs:ChessBackend.GameState, font):
+def drawMoveLog(screen, gs:ChessBackend.GameState, font, engineStatus):
     moveLogRect = p.Rect(BOARD_WIDTH, 0, MOVE_LOG_PANEL_WIDTH, MOVE_LOG_PANEL_HEIGHT)
     p.draw.rect(screen, p.Color("white"), moveLogRect)
+    # ---- bottom info panel (footer) ----
+    padding = 5
+    footer_h = 40  # adjust to taste
+    footerRect = p.Rect(
+        moveLogRect.left,
+        moveLogRect.bottom - footer_h,
+        moveLogRect.width,
+        footer_h
+    )
+
+    p.draw.rect(screen, p.Color("gray"), footerRect)
+
+    # Build footer strings
+    side_str = "White" if gs.player == 1 else "Black"
+
+    if engineStatus == 0:
+        engine_str = "Disabled"
+    elif engineStatus == 1:
+        engine_str = "Enabled (White)"
+    elif engineStatus == -1:
+        engine_str = "Enabled (Black)"
+    else:
+        engine_str = f"Unknown ({engineStatus})"
+
+    info_lines = [
+        f"Side to move: {side_str}",
+        f"Engine: {engine_str}",
+    ]
+
+    # Render footer text
+    info_y = footerRect.top + padding
+    for line in info_lines:
+        textObj = font.render(line, True, p.Color("black"))
+        screen.blit(textObj, (footerRect.left + padding, info_y))
+        info_y += textObj.get_height() + 4
     moveLog = gs.moveLog
     moveTexts = []
+
+    # Render move log
     for i in range(0, len(moveLog), 2):
         moveString = str(i // 2 + 1) + ". " + str(moveLog[i]) + " "
         if i + 1 < len(moveLog):
