@@ -38,7 +38,7 @@ def main():
     engine = ChessEngine.Engine()
     engineEnabled = 0
     engineDepth = 5
-    moveLogFont = p.font.SysFont("Arail", 20, False, False)
+    moveLogFont = p.font.SysFont("", 20, False, False)
     drawGameState(screen, gs, flipped, moveLogFont, engineEnabled)
     while running:
         if engineEnabled == gs.player and gs.info.winner == None:
@@ -169,7 +169,7 @@ def makeEngineMove(gs: ChessBackend.GameState, screen, engine: ChessEngine.Engin
     engineMove = engine.findBestMove(gs, engineDepth)
     print("Engine move time: {:.2f} seconds".format(time.time() - statTime))
     print(f"Nodes searched: {engine.nodesSearched}, from memo: {engine.nodesFromMemo}")
-    print(f"Nodes per second: {(engine.nodesSearched + engine.nodesFromMemo) / (time.time() - statTime):.2f}")
+    print(f"Nodes per second: {(engine.nodesSearched + engine.nodesFromMemo) / (time.time() - statTime + 1e-9):.2f}")
     if engineMove is not None:
         print(engineMove.getChessNotation())
         gs.makeMove(engineMove)
@@ -243,7 +243,7 @@ def drawMoveLog(screen, gs:ChessBackend.GameState, font, engineStatus):
     p.draw.rect(screen, p.Color("white"), moveLogRect)
     # ---- bottom info panel (footer) ----
     padding = 5
-    footer_h = 40  # adjust to taste
+    footer_h = 40 
     footerRect = p.Rect(
         moveLogRect.left,
         moveLogRect.bottom - footer_h,
@@ -289,7 +289,9 @@ def drawMoveLog(screen, gs:ChessBackend.GameState, font, engineStatus):
     textY = padding
     lineSpacing = 5
     movesPerRow = 2
-    for i in range(0, len(moveTexts), movesPerRow):
+    max_lines = 2* (MOVE_LOG_PANEL_HEIGHT - footer_h - padding) // (font.get_height() + lineSpacing) - 2
+    start = max(0, len(moveTexts) - max_lines)
+    for i in range(start, len(moveTexts), movesPerRow):
         text = ""
         for j in range(movesPerRow):
             if i + j < len(moveTexts):
