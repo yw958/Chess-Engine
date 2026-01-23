@@ -136,7 +136,6 @@ class Engine:
                 alpha = score  # root alpha update (optional but helps)
         if bestMove is None and allMoves:
             bestMove = allMoves[0]
-        print(f"Nodes searched: {self.nodesSearched}, from memo: {self.nodesFromMemo}")
         return bestMove
 
     def sortMoves(self, moves: list[ChessBackend.Move]):

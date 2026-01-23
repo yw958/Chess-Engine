@@ -37,7 +37,7 @@ def main():
     flipped = False
     engine = ChessEngine.Engine()
     engineEnabled = 0
-    engineDepth = 6
+    engineDepth = 5
     moveLogFont = p.font.SysFont("Arail", 20, False, False)
     drawGameState(screen, gs, flipped, moveLogFont)
     while running:
@@ -167,6 +167,8 @@ def makeEngineMove(gs: ChessBackend.GameState, screen, engine: ChessEngine.Engin
     statTime = time.time()
     engineMove = engine.findBestMove(gs, engineDepth)
     print("Engine move time: {:.2f} seconds".format(time.time() - statTime))
+    print(f"Nodes searched: {engine.nodesSearched}, from memo: {engine.nodesFromMemo}")
+    print(f"Nodes per second: {(engine.nodesSearched + engine.nodesFromMemo) / (time.time() - statTime):.2f}")
     if engineMove is not None:
         print(engineMove.getChessNotation())
         gs.makeMove(engineMove)

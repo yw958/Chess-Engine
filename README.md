@@ -2,18 +2,24 @@
 
 A Python chess framework that includes backend logic, a graphical user interface, and a negamax engine with alpha-beta pruning.
 
-## Components
-
-- **ChessBackend.py**: Core logic for representing the chess game state, making/undoing moves, and generating valid moves.
-- **ChessMain.py**: User interface for the chess game, handling graphics and user interactions.
-- **ChessEngine.py**: Chess engine implementing a negamax algorithm with alpha-beta pruning.
+## Instructions
+1. Clone this repository 
+2. Run `python -m pip install -r ./requirements.txt`
+3. Run `python ./Chess/ChessMain.py`
+4. Enjoy the game!
 
 ## Keyboard Shortcuts
 
 - **Z**: Undo the last move
 - **F**: Flip the board orientation
-- **E**: Enable engine for the current player
+- **E**: Enable/switch engine for the current player
 - **D**: Disable engine
+
+## Components
+
+- **ChessMain.py**: User interface for the chess game, handling graphics and user interactions. You can adjust engine depth in this file.
+- **ChessBackend.py**: Core logic for representing the chess game state, making/undoing moves, and generating valid moves.
+- **ChessEngine.py**: Chess engine implementing a negamax algorithm with alpha-beta pruning.
 
 ## References
 
