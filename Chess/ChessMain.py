@@ -176,7 +176,7 @@ def makeEngineMove(gs: ChessBackend.GameState, screen, engine: ChessEngine.Engin
     engineMove = engine.findBestMove(gs, engineDepth)
     print("Engine move time: {:.2f} seconds".format(time.time() - statTime))
     print(f"Nodes searched: {engine.nodesSearched}, from memo: {engine.nodesFromMemo}")
-    print(f"Nodes per second: {(engine.nodesSearched + engine.nodesFromMemo) / (time.time() - statTime + 1e-9):.2f}")
+    print(f"Nodes per second: {(engine.nodesSearched + engine.nodesFromMemo + engine.nodesQSearched) / (time.time() - statTime + 1e-9):.2f}")
     if engineMove is not None:
         print(engineMove.getChessNotation())
         gs.makeMove(engineMove)

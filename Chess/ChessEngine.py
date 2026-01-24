@@ -72,6 +72,7 @@ class Engine:
         ]
         self.nodesSearched = 0
         self.nodesFromMemo = 0
+        self.nodesQSearched = 0
         self.memo = {}
 
     def negamax(self, gameState: ChessBackend.GameState, depth: int, alpha: float, beta: float, color: int) -> float:
@@ -81,16 +82,13 @@ class Engine:
                 -1 if from Black perspective,
         assuming gameState.info.eval is positive for White.
         """
+        self.nodesSearched += 1
         boardRep = gameState.boardHistory[-1]
-        pruned = False
         if (boardRep, depth) in self.memo:
             self.nodesFromMemo += 1
             return self.memo[(boardRep, depth)]
         if depth == 0 or gameState.info.winner is not None:
-            val = color * gameState.info.eval
-            self.memo[(boardRep, depth)] = val
-            self.nodesSearched += 1
-            return val
+            return self.qSearch(gameState, alpha, beta, color)
         allMoves = gameState.validMoves.copy()
         self.sortMoves(allMoves)
         best = float("-inf")
@@ -104,17 +102,15 @@ class Engine:
             if score > a:
                 a = score
             if a >= beta:
-                pruned = True
-                break  # prune
-        if not pruned:
-            self.memo[(boardRep, depth)] = best
-        self.nodesSearched += 1
+                return best  # beta cutoff
+        self.memo[(boardRep, depth)] = best
         return best
 
     def findBestMove(self, gameState: ChessBackend.GameState, depth: int) -> ChessBackend.Move:
         bestMove = None
         self.nodesSearched = 0
         self.nodesFromMemo = 0
+        self.nodesQSearched = 0
         allMoves = gameState.validMoves.copy()
         self.sortMoves(allMoves)
         # color based on who's to move at root
@@ -129,7 +125,7 @@ class Engine:
                 bestScore = score
                 bestMove = move
             if score > alpha:
-                alpha = score  # root alpha update (optional but helps)
+                alpha = score
         if bestMove is None and allMoves:
             bestMove = allMoves[0]
         return bestMove
@@ -162,3 +158,38 @@ class Engine:
                 value += 5  # High value for castling
             return value
         moves.sort(key=moveValue, reverse=True)
+
+    def qSearch(self, gs: ChessBackend.GameState, alpha, beta, color, qply_limit=20):
+        """
+        Quiescence search to extend the search in volatile positions.
+        """
+        self.nodesQSearched += 1
+        if gs.info.winner is not None or qply_limit <= 0:
+            return color * gs.info.eval
+        in_check = gs.info.inCheck[color]
+        stand_pat = color * gs.info.eval
+        if in_check:
+            best = float("-inf")
+            moves = gs.validMoves.copy()
+        else:
+            if stand_pat >= beta:
+                return stand_pat
+            if stand_pat > alpha:
+                alpha = stand_pat
+            best = stand_pat
+            moves = [m for m in gs.validMoves if (m.pieceCaptured != 0 or m.pawnPromotion != 0)]
+        if not moves:
+            return stand_pat
+        self.sortMoves(moves)
+        a = alpha
+        for m in moves:
+            gs.makeMove(m)
+            score = -self.qSearch(gs, -beta, -a, -color, qply_limit - 1)
+            gs.undoMove(reCalculateMoves=False)
+            if score > best:
+                best = score
+            if score > a:
+                a = score
+            if a >= beta:
+                break
+        return best

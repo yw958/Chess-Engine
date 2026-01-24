@@ -597,11 +597,12 @@ class GameState:
         return None
 
     def getPawnMoves(self, row, col, player):
+        inCheck = self.info.inCheck[player]
         startRow = 6 if player == 1 else 1
         if self.board[row - player][col] == 0:
             move = Move((row, col), (row - player, col), self.board)
             if not self.isPinned(move, player):
-                if not self.info.inCheck[player] or (row - player, col) in self.info.block_mask[player]:
+                if not inCheck or (row - player, col) in self.info.block_mask[player]:
                     if row - player == 0 or row - player == 7:
                         for promoPiece in [5,4,3,2]: # promote to queen, rook, bishop, knight
                             move = Move((row, col), (row - player, col), self.board)
@@ -615,7 +616,7 @@ class GameState:
                         self.validMoves.append(move)
                 if row == startRow and self.board[row - 2 * player][col] == 0:
                     move = Move((row, col), (row - 2 * player, col), self.board)
-                    if not self.info.inCheck[player] or (row - 2 * player, col) in self.info.block_mask[player]:
+                    if not inCheck or (row - 2 * player, col) in self.info.block_mask[player]:
                         move.isCheck = (row - 2 * player, col) in self.info.checkSquares[1]
                         move.discoveredCheck = self.discoveredCheck(move, player)
                         self.validMoves.append(move)
@@ -624,7 +625,7 @@ class GameState:
                 if self.board[row - player][col + dc] * player < 0:
                     move = Move((row, col), (row - player, col + dc), self.board)
                     if not self.isPinned(move, player):
-                        if not self.info.inCheck[player] or (row - player, col + dc) in self.info.block_mask[player]:
+                        if not inCheck or (row - player, col + dc) in self.info.block_mask[player]:
                             if row - player == 0 or row - player == 7:
                                 for promoPiece in [5,4,3,2]: # promote to queen, rook, bishop, knight
                                     move = Move((row, col), (row - player, col + dc), self.board)
@@ -641,7 +642,7 @@ class GameState:
                     move.isEnPassantMove = True
                     move.pieceCaptured = -1 * player
                     if not self.isPinned(move, player):
-                        if not self.info.inCheck[player] or (row - player, col + dc) in self.info.block_mask[player]:
+                        if not inCheck or (row - player, col + dc) in self.info.block_mask[player]:
                             move.isCheck = (row - player, col + dc) in self.info.checkSquares[1]
                             move.discoveredCheck = self.discoveredCheck(move, player)
                             self.validMoves.append(move)
@@ -651,12 +652,13 @@ class GameState:
         #Return if pinned
         if self.isPinned(Move((row, col), (row, col), self.board), player):
             return
+        inCheck = self.info.inCheck[player]
         for moveOffset in knightMoves:
             endRow = row + moveOffset[0]
             endCol = col + moveOffset[1]
             if 0 <= endRow < 8 and 0 <= endCol < 8 and self.board[endRow][endCol] * player <= 0:
                 move = Move((row, col), (endRow, endCol), self.board)
-                if not self.info.inCheck[player] or (endRow, endCol) in self.info.block_mask[player]:
+                if not inCheck or (endRow, endCol) in self.info.block_mask[player]:
                     move.isCheck = (endRow, endCol) in self.info.checkSquares[2]
                     move.discoveredCheck = self.discoveredCheck(move, player)
                     self.validMoves.append(move)
@@ -670,6 +672,7 @@ class GameState:
             directions = [(-1, -1), (-1, 1), (1, -1), (1, 1), (-1, 0), (1, 0), (0, -1), (0, 1)]
         else:
             return
+        inCheck = self.info.inCheck[player]
         for direction in directions:
             currRow, currCol = row + direction[0], col + direction[1]
             if 0 <= currRow < 8 and 0 <= currCol < 8:
@@ -677,7 +680,7 @@ class GameState:
                     continue
                 move = Move((row, col), (currRow, currCol), self.board)
                 if not self.isPinned(move, player):
-                    if not self.info.inCheck[player] or (currRow, currCol) in self.info.block_mask[player]:
+                    if not inCheck or (currRow, currCol) in self.info.block_mask[player]:
                         move.isCheck = (currRow, currCol) in self.info.checkSquares[abs(piece)]
                         move.discoveredCheck = self.discoveredCheck(move, player)
                         self.validMoves.append(move)
@@ -690,7 +693,7 @@ class GameState:
                             if self.board[currRow][currCol] * player > 0:
                                 break
                             move = Move((row, col), (currRow, currCol), self.board)
-                            if not self.info.inCheck[player] or (currRow, currCol) in self.info.block_mask[player]:
+                            if not inCheck or (currRow, currCol) in self.info.block_mask[player]:
                                 move.isCheck = (currRow, currCol) in self.info.checkSquares[abs(piece)]
                                 move.discoveredCheck = self.discoveredCheck(move, player)
                                 self.validMoves.append(move)
