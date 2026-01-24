@@ -45,7 +45,6 @@ class Info:
         self.block_mask = [set(),set(),set()]
         self.capture_mask = [set(),set(),set()]
         self.enPassantPossible = () # coordinates for the square where en passant capture is possible
-        self.validMoves = {} 
         self.winner = None # None, 1 for white win, -1 for black win, 0 for draw
         self.seventyFiveMoveRuleCounter = 0 # counts half-moves since last pawn move or capture for 75-move rule
         self.eval = 0 # evaluation score of the position
@@ -57,7 +56,6 @@ class Info:
         new.block_mask = [s.copy() for s in self.block_mask]
         new.capture_mask = [s.copy() for s in self.capture_mask]
         new.enPassantPossible = self.enPassantPossible
-        new.validMoves = {} #No need to copy validMoves for undo
         new.winner = self.winner
         new.seventyFiveMoveRuleCounter = self.seventyFiveMoveRuleCounter
         new.eval = self.eval
@@ -83,6 +81,7 @@ class GameState:
         self.info = Info()
         self.boardHistory = []
         self.boardCounter = {}
+        self.validMoves = []
         boardRep = self.boardRepresentation()
         self.boardCounter[boardRep] = 1
         self.boardHistory.append(boardRep)
@@ -183,7 +182,7 @@ class GameState:
         self.boardHistory.append(boardRepresentation)     
         self.updateKingSafety(self.player)
         self.updateAllValidMoves()
-        if not self.info.validMoves:
+        if not self.validMoves:
             if self.info.inCheck[self.player]:
                 self.info.winner = -self.player # Checkmate
             else:
@@ -416,7 +415,7 @@ class GameState:
                 self.info.capture_mask[player].add((attackingPieceRow, attackingPieceCol))
                 
     def updateAllValidMoves(self): #Generates all valid moves for the current player and detects dead positions
-        self.info.validMoves = {}
+        self.validMoves = []
         if self.info.winner is not None:
             return
         pieces = []
@@ -437,27 +436,25 @@ class GameState:
                         elif self.board[r][c] == 3:
                             bishopColorWhite = (r + c) % 2
                     if (self.board[r][c] > 0) == (self.player > 0):
-                        moves = self.getValidMoves((r, c))
-                        if moves:
-                            self.info.validMoves[(r, c)] = moves
+                        self.updateValidMoves((r, c))
         #Check for dead position (insufficient material)
         if possibleDead:
             if len(pieces) == 2: #K vs K
                 self.info.winner = 0 # Draw
-                self.info.validMoves = {}
+                self.validMoves = []
             else:
                 pieces.sort()
                 # K vs K + N or K vs K + B
                 if len(pieces) == 3 and (pieces == [-6, 3, 6] or pieces == [-6, -3, 6] or pieces == [-6, 2, 6] or pieces == [-6, -2, 6]):
                     self.info.winner = 0 # Draw
-                    self.info.validMoves = {}
+                    self.validMoves = []
                 # K + B vs K + B (both bishops on same color)
                 elif pieces == [-6, -3, 3, 6]:
                     if bishopColorBlack == bishopColorWhite:
                         self.info.winner = 0 # Draw
-                        self.info.validMoves = {}
+                        self.validMoves = []
     
-    def getValidMoves(self, position):
+    def updateValidMoves(self, position):
         row, col = position
         piece = self.board[row][col]
         if piece == 0 or (piece > 0) != (self.player > 0):
@@ -495,7 +492,6 @@ class GameState:
         return not inCheck
 
     def getPawnMoves(self, row, col, player):
-        moves = []
         startRow = 6 if player == 1 else 1
         if self.board[row - player][col] == 0:
             move = Move((row, col), (row - player, col), self.board)
@@ -504,13 +500,13 @@ class GameState:
                     for promoPiece in [5,4,3,2]: # promote to queen, rook, bishop, knight
                         move = Move((row, col), (row - player, col), self.board)
                         move.pawnPromotion = promoPiece * player
-                        moves.append(move)
+                        self.validMoves.append(move)
                 else:
-                    moves.append(move)
+                    self.validMoves.append(move)
             if row == startRow and self.board[row - 2 * player][col] == 0:
                 move = Move((row, col), (row - 2 * player, col), self.board)
                 if self.checkMoveSafety(move, player):
-                    moves.append(move)
+                    self.validMoves.append(move)
         for dc in [-1, 1]:
             if 0 <= col + dc < 8:
                 if self.board[row - player][col + dc] * player < 0:
@@ -520,19 +516,17 @@ class GameState:
                             for promoPiece in [5,4,3,2]: # promote to queen, rook, bishop, knight
                                 move = Move((row, col), (row - player, col + dc), self.board)
                                 move.pawnPromotion = promoPiece * player
-                                moves.append(move)
+                                self.validMoves.append(move)
                         else:
-                            moves.append(move)
+                            self.validMoves.append(move)
                 elif (row - player, col + dc) == self.info.enPassantPossible:
                     move = Move((row, col), (row - player, col + dc), self.board)
                     move.isEnPassantMove = True
                     move.pieceCaptured = -1 * player
                     if self.checkMoveSafety(move, player):
-                        moves.append(move)
-        return moves
+                        self.validMoves.append(move)
     
     def getKnightMoves(self, row, col, player):
-        moves = []
         knightMoves = [(-2, -1), (-2, 1), (-1, -2), (-1, 2), (1, -2), (1, 2), (2, -1), (2, 1)]
         if self.info.inCheck[player]: #While in check skip moves that don't block or capture
             for moveOffset in knightMoves:
@@ -542,7 +536,7 @@ class GameState:
                     move = Move((row, col), (endRow, endCol), self.board)
                     if (endRow, endCol) in self.info.capture_mask[player] or (endRow, endCol) in self.info.block_mask[player]:
                         if self.checkMoveSafety(move, player):
-                            moves.append(move)
+                            self.validMoves.append(move)
         else: #While not in check, if one is safe (not pinned), we can skip safety checks for all moves
             checkedSafety = False
             for moveOffset in knightMoves:
@@ -553,15 +547,13 @@ class GameState:
                     if not checkedSafety:
                         if self.checkMoveSafety(move, player):
                             checkedSafety = True
-                            moves.append(move)
+                            self.validMoves.append(move)
                         else: #not safe, piece is pinned, no other moves are valid
                             break
                     else:
-                        moves.append(move)
-        return moves
+                        self.validMoves.append(move)
     
     def getRayMoves(self, row, col, player, piece):
-        moves = []
         if abs(piece) == 3: #Bishop
             directions = [(-1, -1), (-1, 1), (1, -1), (1, 1)]
         elif abs(piece) == 4: #Rook
@@ -569,7 +561,7 @@ class GameState:
         elif abs(piece) == 5: #Queen
             directions = [(-1, -1), (-1, 1), (1, -1), (1, 1), (-1, 0), (1, 0), (0, -1), (0, 1)]
         else:
-            return moves
+            return
         if self.info.inCheck[player]: #While in check skip moves that don't block or capture
             for direction in directions:
                 currRow, currCol = row, col
@@ -582,7 +574,7 @@ class GameState:
                         if (currRow, currCol) in self.info.capture_mask[player] or (currRow, currCol) in self.info.block_mask[player]:
                             move = Move((row, col), (currRow, currCol), self.board)
                             if self.checkMoveSafety(move, player):
-                                moves.append(move)
+                                self.validMoves.append(move)
                             break
                         if self.board[currRow][currCol] * player < 0:
                             break
@@ -596,7 +588,7 @@ class GameState:
                         continue
                     move = Move((row, col), (currRow, currCol), self.board)
                     if self.checkMoveSafety(move, player):
-                        moves.append(move)
+                        self.validMoves.append(move)
                         if self.board[currRow][currCol] * player < 0:
                             continue
                         while True:
@@ -606,15 +598,13 @@ class GameState:
                                 if self.board[currRow][currCol] * player > 0:
                                     break
                                 move = Move((row, col), (currRow, currCol), self.board)
-                                moves.append(move)
+                                self.validMoves.append(move)
                                 if self.board[currRow][currCol] * player < 0:
                                     break
                             else:
                                 break
-        return moves
     
     def getKingMoves(self, row, col, player):
-        moves = []
         kingMoves = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
         for moveOffset in kingMoves:
             endRow = row + moveOffset[0]
@@ -622,18 +612,17 @@ class GameState:
             if 0 <= endRow < 8 and 0 <= endCol < 8 and self.board[endRow][endCol] * player <= 0:
                 move = Move((row, col), (endRow, endCol), self.board)
                 if self.checkMoveSafety(move, player):
-                    moves.append(move)
+                    self.validMoves.append(move)
         if not self.info.inCheck[player]:
             if self.info.castlingRights[player][0]: #king side
                 if self.board[row][col + 1] == 0 and self.board[row][col + 2] == 0:
                     if not self.isAttacked(row, col + 1, player) and not self.isAttacked(row, col + 2, player):
                         move = Move((row, col), (row, col + 2), self.board)
                         move.isCastlingMove = True
-                        moves.append(move)
+                        self.validMoves.append(move)
             if self.info.castlingRights[player][1]: #queen side
                 if self.board[row][col - 1] == 0 and self.board[row][col - 2] == 0 and self.board[row][col - 3] == 0:
                     if not self.isAttacked(row, col - 1, player) and not self.isAttacked(row, col - 2, player):
                         move = Move((row, col), (row, col - 2), self.board)
                         move.isCastlingMove = True
-                        moves.append(move)
-        return moves
+                        self.validMoves.append(move)

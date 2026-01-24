@@ -37,7 +37,7 @@ def main():
     flipped = False
     engine = ChessEngine.Engine()
     engineEnabled = 0
-    engineDepth = 5
+    engineDepth = 6
     moveLogFont = p.font.SysFont("", 20, False, False)
     drawGameState(screen, gs, flipped, moveLogFont, engineEnabled)
     while running:
@@ -70,7 +70,7 @@ def main():
                         continue # clicked on an empty square without having selected a piece
                     sqSelected = (row, col)
                     drawSelectedSquare(screen, row, col, flipped)
-                    validMoves = gs.info.validMoves.get((row, col), [])
+                    validMoves = getValidMovesList(gs, row, col)
                     drawHighlightedSquares(screen, validMoves, flipped)
                 else:
                     if (row, col) == sqSelected: # user clicked the same square twice
@@ -80,7 +80,7 @@ def main():
                         continue
                     if gs.board[row][col] != 0 and (gs.board[row][col] > 0) == (gs.player > 0):
                         sqSelected = (row, col)
-                        validMoves = gs.info.validMoves.get((row, col), [])
+                        validMoves = getValidMovesList(gs, row, col)
                         drawGameState(screen, gs, flipped, moveLogFont, engineEnabled)
                         drawSelectedSquare(screen, row, col, flipped)
                         drawHighlightedSquares(screen, validMoves, flipped)
@@ -162,6 +162,13 @@ def main():
                     print("Engine disabled")
         clock.tick(MAX_FPS)
         p.display.flip()
+
+def getValidMovesList(gameState: ChessBackend.GameState, row, col) -> list[ChessBackend.Move]:
+    validMoves = []
+    for move in gameState.validMoves:
+        if move.startRow == row and move.startCol == col:
+            validMoves.append(move)
+    return validMoves
 
 def makeEngineMove(gs: ChessBackend.GameState, screen, engine: ChessEngine.Engine, flipped = False, engineDepth = 3, moveLogFont = None, engineEnabled = 0):
     print("Engine is thinking...")

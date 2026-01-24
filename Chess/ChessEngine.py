@@ -91,9 +91,7 @@ class Engine:
             self.memo[(boardRep, depth)] = val
             self.nodesSearched += 1
             return val
-        allMoves = []
-        for moves in gameState.info.validMoves.values():
-            allMoves += moves
+        allMoves = gameState.validMoves.copy()
         self.sortMoves(allMoves)
         best = float("-inf")
         a = alpha
@@ -115,11 +113,9 @@ class Engine:
 
     def findBestMove(self, gameState: ChessBackend.GameState, depth: int) -> ChessBackend.Move:
         bestMove = None
-        allMoves = []
         self.nodesSearched = 0
         self.nodesFromMemo = 0
-        for moves in gameState.info.validMoves.values():
-            allMoves += moves
+        allMoves = gameState.validMoves.copy()
         self.sortMoves(allMoves)
         # color based on who's to move at root
         color = gameState.player
