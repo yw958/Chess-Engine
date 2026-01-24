@@ -2,9 +2,7 @@
 Contains the core logic for representing the chess game state, making and undoing moves,
 and generating valid moves.
 """
-PIECES = [None, 'P', 'N', 'B', 'R', 'Q', 'K', 'k', 'q', 'r', 'b', 'n', 'p']
-VALUES = [0, 1, 3, 3, 5, 9, 0]
-
+from PieceTables import PieceTables
 class Move:
     def __init__(self, startSq, endSq, board):
         self.startRow = startSq[0]
@@ -30,10 +28,10 @@ class Move:
             str_return = f"{chr(ord('a') + self.startCol)}{8 - self.startRow}x{chr(ord('a') + self.endCol)}{8 - self.endRow} e.p."
         elif self.pawnPromotion:
             if self.pieceCaptured != 0:
-                str_return = f"{chr(ord('a') + self.startCol)}x{chr(ord('a') + self.endCol)}{8 - self.endRow}={PIECES[abs(self.pawnPromotion)]}"
-            str_return = f"{chr(ord('a') + self.startCol)}{8 - self.startRow}{chr(ord('a') + self.endCol)}{8 - self.endRow}={PIECES[abs(self.pawnPromotion)]}"
+                str_return = f"{chr(ord('a') + self.startCol)}x{chr(ord('a') + self.endCol)}{8 - self.endRow}={PieceTables.PIECES[abs(self.pawnPromotion)]}"
+            str_return = f"{chr(ord('a') + self.startCol)}{8 - self.startRow}{chr(ord('a') + self.endCol)}{8 - self.endRow}={PieceTables.PIECES[abs(self.pawnPromotion)]}"
         elif self.pieceCaptured != 0:
-            pieceChar = '' if abs(self.pieceMoved) == 1 else PIECES[abs(self.pieceMoved)]
+            pieceChar = '' if abs(self.pieceMoved) == 1 else PieceTables.PIECES[abs(self.pieceMoved)]
             str_return = f"{pieceChar}{chr(ord('a') + self.startCol)}x{chr(ord('a') + self.endCol)}{8 - self.endRow}"
         else:
             str_return = f"{chr(ord('a') + self.startCol)}{8 - self.startRow} -> {chr(ord('a') + self.endCol)}{8 - self.endRow}"
@@ -109,7 +107,7 @@ class GameState:
                     if empty:
                         parts.append(str(empty))
                         empty = 0
-                    parts.append(PIECES[sq])
+                    parts.append(PieceTables.PIECES[sq])
             if empty:
                 parts.append(str(empty))
             ranks.append(''.join(parts))
@@ -211,9 +209,9 @@ class GameState:
         pieceCapture = move.pieceCaptured
         pawnPromotion = move.pawnPromotion
         if pieceCapture != 0:
-            self.info.eval += VALUES[abs(pieceCapture)] * (-self.player)
+            self.info.eval += PieceTables.VALUES[abs(pieceCapture)] * (-self.player)
         if pawnPromotion != 0:
-            self.info.eval += (VALUES[abs(pawnPromotion)] - 1) * (-self.player)
+            self.info.eval += (PieceTables.VALUES[abs(pawnPromotion)] - 1) * (-self.player)
         
     def undoMove(self, reCalculateMoves = True):
         if len(self.moveLog) == 0:
