@@ -138,10 +138,14 @@ class Engine:
         # Sort moves to prioritize captures and center control
         def moveValue(move: ChessBackend.Move):
             value = 0
+            if move.isCheck:
+                value += 100  # High value for checks
+            if move.discoveredCheck:
+                value += 100  # High value for discovered checks
             if move.pieceCaptured != 0:
                 value += 10 * abs(move.pieceCaptured) - abs(move.pieceMoved)
             if move.pawnPromotion != 0:
-                value += 10 * abs(move.pawnPromotion)  # High value for promotion
+                value += 20 * abs(move.pawnPromotion)  # High value for promotion
             if move.pieceMoved == 1:
                 value += self.whitePawnScores[move.endRow][move.endCol] - self.whitePawnScores[move.startRow][move.startCol]
             elif move.pieceMoved == -1:

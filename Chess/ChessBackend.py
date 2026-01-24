@@ -16,23 +16,30 @@ class Move:
         self.isCastlingMove = False
         self.isEnPassantMove = False
         self.pawnPromotion = 0
+        self.isCheck = False # True if this move gives check to opponent directly (without discovered check)
+        self.discoveredCheck = None # None means no discovered check. If there is discovered check, it stores the square of the checking piece
     def getChessNotation(self):
         # Simple chess notation (e.g., "e4" for pawn move to e4)
+        str_return = ""
         if self.isCastlingMove:
             if self.endCol == 6:
-                return "O-O"
+                str_return = "O-O"
             else:
-                return "O-O-O"
-        if self.isEnPassantMove:
-            return f"{chr(ord('a') + self.startCol)}{8 - self.startRow}x{chr(ord('a') + self.endCol)}{8 - self.endRow} e.p."
-        if self.pawnPromotion:
+                str_return = "O-O-O"
+        elif self.isEnPassantMove:
+            str_return = f"{chr(ord('a') + self.startCol)}{8 - self.startRow}x{chr(ord('a') + self.endCol)}{8 - self.endRow} e.p."
+        elif self.pawnPromotion:
             if self.pieceCaptured != 0:
-                return f"{chr(ord('a') + self.startCol)}x{chr(ord('a') + self.endCol)}{8 - self.endRow}={PIECES[abs(self.pawnPromotion)]}"
-            return f"{chr(ord('a') + self.startCol)}{8 - self.startRow}{chr(ord('a') + self.endCol)}{8 - self.endRow}={PIECES[abs(self.pawnPromotion)]}"
-        if self.pieceCaptured != 0:
+                str_return = f"{chr(ord('a') + self.startCol)}x{chr(ord('a') + self.endCol)}{8 - self.endRow}={PIECES[abs(self.pawnPromotion)]}"
+            str_return = f"{chr(ord('a') + self.startCol)}{8 - self.startRow}{chr(ord('a') + self.endCol)}{8 - self.endRow}={PIECES[abs(self.pawnPromotion)]}"
+        elif self.pieceCaptured != 0:
             pieceChar = '' if abs(self.pieceMoved) == 1 else PIECES[abs(self.pieceMoved)]
-            return f"{pieceChar}{chr(ord('a') + self.startCol)}x{chr(ord('a') + self.endCol)}{8 - self.endRow}"
-        return f"{chr(ord('a') + self.startCol)}{8 - self.startRow} -> {chr(ord('a') + self.endCol)}{8 - self.endRow}"
+            str_return = f"{pieceChar}{chr(ord('a') + self.startCol)}x{chr(ord('a') + self.endCol)}{8 - self.endRow}"
+        else:
+            str_return = f"{chr(ord('a') + self.startCol)}{8 - self.startRow} -> {chr(ord('a') + self.endCol)}{8 - self.endRow}"
+        if self.isCheck or self.discoveredCheck:
+            str_return += "+"
+        return str_return
 
     def __str__(self):
         return self.getChessNotation()
@@ -43,10 +50,11 @@ class Info:
         self.kingLocations = [(0,0), (7, 4), (0, 4)] # track kings' positions for check detection, index 0 unused, 1 for white, -1 for black
         self.inCheck = [False, False, False] # is white in check, is black in check
         self.block_mask = [set(),set(),set()]
-        self.capture_mask = [set(),set(),set()]
         self.enPassantPossible = () # coordinates for the square where en passant capture is possible
         self.winner = None # None, 1 for white win, -1 for black win, 0 for draw
         self.seventyFiveMoveRuleCounter = 0 # counts half-moves since last pawn move or capture for 75-move rule
+        self.checkSquares = [set(),set(),set(),set(),set(),set()] # squares that put the enemy king in check. Index 0 unused, 1-5 for piece types
+        self.potentialPins = set() # squares where pieces are potentially pinned
         self.eval = 0 # evaluation score of the position
     def copy(self):
         new = Info()
@@ -54,10 +62,11 @@ class Info:
         new.kingLocations = self.kingLocations[:]       
         new.inCheck = self.inCheck[:]
         new.block_mask = [s.copy() for s in self.block_mask]
-        new.capture_mask = [s.copy() for s in self.capture_mask]
         new.enPassantPossible = self.enPassantPossible
         new.winner = self.winner
         new.seventyFiveMoveRuleCounter = self.seventyFiveMoveRuleCounter
+        new.checkSquares = [s.copy() for s in self.checkSquares]
+        new.potentialPins = self.potentialPins.copy()
         new.eval = self.eval
         return new
     
@@ -180,7 +189,7 @@ class GameState:
         if count >= 5:
             self.info.winner = 0 # Draw by fivefold repetition
         self.boardHistory.append(boardRepresentation)     
-        self.updateKingSafety(self.player)
+        self.updateKingSafety(self.player, move)
         self.updateAllValidMoves()
         if not self.validMoves:
             if self.info.inCheck[self.player]:
@@ -295,7 +304,426 @@ class GameState:
                     return True
         return False
     
-    #A more detailed version of isAttacked that also returns the attacking piece and its location
+    def updateKingSafety(self, player, move: Move):
+        kingRow, kingCol = self.info.kingLocations[player]
+        self.info.block_mask[player] = set()
+        inCheck = False
+        attackingPiece = None
+        attackingPieceRow = -1
+        attackingPieceCol = -1
+        if move.isCheck:
+            inCheck = True
+            attackingPiece = abs(move.pieceMoved)
+            attackingPieceRow = move.endRow
+            attackingPieceCol = move.endCol
+            if move.isCheck and move.discoveredCheck:
+                attackingPiece = 7 #indicate multiple attackers
+        elif move.discoveredCheck:
+            inCheck = True
+            if move.isEnPassantMove and move.discoveredCheck == (-1,-1):
+                attackingPiece = 7 #indicate multiple attackers
+            else:
+                attackingPieceRow = move.discoveredCheck[0]
+                attackingPieceCol = move.discoveredCheck[1]
+                attackingPiece = abs(self.board[attackingPieceRow][attackingPieceCol])
+        self.info.inCheck[player] = inCheck
+        if inCheck and attackingPiece != 7:
+            if attackingPiece in [2, 1, 6]: # knight, pawn, king
+                self.info.block_mask[player].add((attackingPieceRow, attackingPieceCol))
+            else:
+                # Compute the direction from the king to the attacking piece
+                directionRow = (attackingPieceRow > kingRow) - (attackingPieceRow < kingRow)
+                directionCol = (attackingPieceCol > kingCol) - (attackingPieceCol < kingCol)
+                currRow = kingRow + directionRow
+                currCol = kingCol + directionCol
+                while (currRow, currCol) != (attackingPieceRow, attackingPieceCol):
+                    self.info.block_mask[player].add((currRow, currCol))
+                    currRow += directionRow
+                    currCol += directionCol
+                self.info.block_mask[player].add((attackingPieceRow, attackingPieceCol))
+        # Update potential pins
+        dirs = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
+        self.info.potentialPins = set()
+        for direction in dirs:
+            currRow, currCol = kingRow, kingCol
+            while True:
+                currRow += direction[0]
+                currCol += direction[1]
+                if 0 <= currRow < 8 and 0 <= currCol < 8:
+                    piece = self.board[currRow][currCol]
+                    if piece == 0:
+                        continue
+                    elif (piece > 0) == (player > 0): # friendly piece
+                        self.info.potentialPins.add((currRow, currCol))
+                        break
+                    else:  # enemy piece
+                        break
+                else:
+                    break
+        #Update Check squares
+        self.updateCheckSquares(player)
+
+    def updateCheckSquares(self, player):
+        #Update check squares for the enemy king for move generation
+        self.info.checkSquares = [set(),set(),set(),set(),set(),set()]
+        enemyKingR, enemyKingC = self.info.kingLocations[-player]
+        #Pawns
+        dirs = [(player, -1), (player, 1)]
+        for d in dirs:
+            r = enemyKingR + d[0]
+            c = enemyKingC + d[1]
+            if 0 <= r < 8 and 0 <= c < 8:
+                self.info.checkSquares[1].add((r, c))
+        #Knights
+        knightMoves = [(-2, -1), (-2, 1), (-1, -2), (-1, 2), (1, -2), (1, 2), (2, -1), (2, 1)]
+        for move in knightMoves:
+            r = enemyKingR + move[0]
+            c = enemyKingC + move[1]
+            if 0 <= r < 8 and 0 <= c < 8:
+                self.info.checkSquares[2].add((r, c))
+        #Bishops/Queens (diagonal)
+        directions = [(-1, -1), (-1, 1), (1, -1), (1, 1)]
+        for direction in directions:
+            currRow, currCol = enemyKingR, enemyKingC
+            while True:
+                currRow += direction[0]
+                currCol += direction[1]
+                if 0 <= currRow < 8 and 0 <= currCol < 8:
+                    piece = self.board[currRow][currCol]
+                    if piece == 0:
+                        self.info.checkSquares[3].add((currRow, currCol))
+                        self.info.checkSquares[5].add((currRow, currCol))
+                    else:
+                        self.info.checkSquares[3].add((currRow, currCol))
+                        self.info.checkSquares[5].add((currRow, currCol))
+                        break
+                else:
+                    break
+        #Rooks/Queens (horizontal/vertical)
+        directions = [(-1, 0), (1, 0), (0, -1), (0, 1)]
+        for direction in directions:
+            currRow, currCol = enemyKingR, enemyKingC
+            while True:
+                currRow += direction[0]
+                currCol += direction[1]
+                if 0 <= currRow < 8 and 0 <= currCol < 8:
+                    piece = self.board[currRow][currCol]
+                    if piece == 0:
+                        self.info.checkSquares[4].add((currRow, currCol))
+                        self.info.checkSquares[5].add((currRow, currCol))
+                    else:
+                        self.info.checkSquares[4].add((currRow, currCol))
+                        self.info.checkSquares[5].add((currRow, currCol))
+                        break
+                else:
+                    break
+
+    def updateAllValidMoves(self): #Generates all valid moves for the current player and detects dead positions
+        self.validMoves = []
+        if self.info.winner is not None:
+            return
+        pieces = []
+        possibleDead = True
+        bishopColorBlack = None
+        bishopColorWhite = None
+        for r in range(8):
+            for c in range(8):
+                if self.board[r][c] != 0:
+                    if possibleDead:
+                        pieces.append(self.board[r][c])
+                        if len(pieces) > 4:
+                            possibleDead = False
+                        elif abs(self.board[r][c]) == 5 or abs(self.board[r][c]) ==4 or abs(self.board[r][c]) ==1:
+                            possibleDead = False
+                        elif self.board[r][c] == -3:
+                            bishopColorBlack = (r + c) % 2
+                        elif self.board[r][c] == 3:
+                            bishopColorWhite = (r + c) % 2
+                    if (self.board[r][c] > 0) == (self.player > 0):
+                        self.updateValidMoves((r, c))
+        #Check for dead position (insufficient material)
+        if possibleDead:
+            if len(pieces) == 2: #K vs K
+                self.info.winner = 0 # Draw
+                self.validMoves = []
+            else:
+                pieces.sort()
+                # K vs K + N or K vs K + B
+                if len(pieces) == 3 and (pieces == [-6, 3, 6] or pieces == [-6, -3, 6] or pieces == [-6, 2, 6] or pieces == [-6, -2, 6]):
+                    self.info.winner = 0 # Draw
+                    self.validMoves = []
+                # K + B vs K + B (both bishops on same color)
+                elif pieces == [-6, -3, 3, 6]:
+                    if bishopColorBlack == bishopColorWhite:
+                        self.info.winner = 0 # Draw
+                        self.validMoves = []
+    
+    def updateValidMoves(self, position):
+        row, col = position
+        piece = self.board[row][col]
+        if piece == 0 or (piece > 0) != (self.player > 0):
+            return [] # No piece or not the player's piece
+        if self.info.inCheck[self.player] and not self.info.block_mask[self.player]:
+            if piece == 6 or piece == -6:
+                return self.getKingMoves(row, col, self.player)
+            return [] # In double check, only king moves allowed
+        if abs(piece) == 1:
+            return self.getPawnMoves(row, col, self.player)
+        if abs(piece) == 2:
+            return self.getKnightMoves(row, col, self.player)
+        if abs(piece) == 3 or abs(piece) == 4 or abs(piece) == 5:
+            return self.getRayMoves(row, col, self.player, piece)
+        if abs(piece) == 6:
+            return self.getKingMoves(row, col, self.player)
+        return []
+    
+    def checkMoveSafety(self, move: Move, player):
+        self.board[move.startRow][move.startCol] = 0
+        self.board[move.endRow][move.endCol] = move.pieceMoved
+        if move.isEnPassantMove:
+            self.board[move.endRow + player][move.endCol] = 0
+        if move.pieceMoved * player == 6:
+            kingRow, kingCol = move.endRow, move.endCol
+        else:
+            kingRow, kingCol = self.info.kingLocations[player]
+        inCheck = self.isAttacked(kingRow, kingCol, player)
+        if move.isEnPassantMove:
+            self.board[move.endRow + player][move.endCol] = move.pieceCaptured
+            self.board[move.endRow][move.endCol] = 0
+        else:
+            self.board[move.endRow][move.endCol] = move.pieceCaptured
+        self.board[move.startRow][move.startCol] = move.pieceMoved
+        return not inCheck
+    
+    def isPinned(self, move: Move, player):
+        """
+        Return True if the piece being moved is pinned to the king
+        """
+        if (move.startRow, move.startCol) not in self.info.potentialPins:
+            return False
+        kingRow = self.info.kingLocations[player][0]
+        kingCol = self.info.kingLocations[player][1]
+        pinnedDirectionRow = (move.startRow > kingRow) - (move.startRow < kingRow)
+        pinnedDirectionCol = (move.startCol > kingCol) - (move.startCol < kingCol)
+        moveDirectionRow = (move.endRow > move.startRow) - (move.endRow < move.startRow)
+        moveDirectionCol = (move.endCol > move.startCol) - (move.endCol < move.startCol)
+        if (pinnedDirectionRow, pinnedDirectionCol) == (moveDirectionRow, moveDirectionCol) or (
+            pinnedDirectionRow, pinnedDirectionCol) == (-moveDirectionRow, -moveDirectionCol):
+            return False
+        currRow, currCol = move.startRow, move.startCol
+        while True:
+            currRow += pinnedDirectionRow
+            currCol += pinnedDirectionCol
+            if 0 <= currRow < 8 and 0 <= currCol < 8:
+                piece = self.board[currRow][currCol]
+                if piece == 0:
+                    continue
+                elif (piece > 0) == (player > 0): # friendly piece
+                    break
+                else:  # enemy piece
+                    if pinnedDirectionRow == 0 or pinnedDirectionCol == 0:
+                        if piece == -4 * player or piece == -5 * player:
+                            return True
+                    else:
+                        if piece == -3 * player or piece == -5 * player:
+                            return True
+                    break
+            else:
+                break
+
+    def discoveredCheck(self, move: Move, player):
+        if (move.startRow, move.startCol) not in self.info.checkSquares[5]:
+            if move.isEnPassantMove:
+                #Check for single discovered check via en passant
+                enPassantRow = move.endRow + player
+                enPassantCol = move.endCol
+                if (enPassantRow, enPassantCol) in self.info.checkSquares[3]:
+                    return self.discoveredCheck(Move((enPassantRow, enPassantCol), 
+                                                     (move.endRow, enPassantCol),
+                                                     self.board), player)
+            return None
+        kingRow, kingCol = self.info.kingLocations[-player]
+        directionRow = (move.startRow > kingRow) - (move.startRow < kingRow)
+        directionCol = (move.startCol > kingCol) - (move.startCol < kingCol)
+        moveDirRow = (move.endRow > move.startRow) - (move.endRow < move.startRow)
+        moveDirCol = (move.endCol > move.startCol) - (move.endCol < move.startCol)
+        if (directionRow, directionCol) == (moveDirRow, moveDirCol) or (
+            directionRow, directionCol) == (-moveDirRow, -moveDirCol):
+            return None # Moving away or along the line, no discovered check
+        currRow, currCol = move.startRow, move.startCol
+        while True:
+            currRow += directionRow
+            currCol += directionCol
+            if 0 <= currRow < 8 and 0 <= currCol < 8:
+                piece = self.board[currRow][currCol]
+                if piece == 0:
+                    continue
+                elif (piece > 0) != (player > 0): # enemy piece
+                    break
+                else:  # friendly piece
+                    if directionRow == 0 or directionCol == 0:
+                        if piece == 4 * player or piece == 5 * player:
+                            #Check for Double discovered check (extremely rare)
+                            if move.isEnPassantMove:
+                                enPassantRow = move.endRow + player
+                                enPassantCol = move.endCol
+                                if (enPassantRow, enPassantCol) in self.info.checkSquares[3]:
+                                    if self.discoveredCheck(Move((enPassantRow, enPassantCol), 
+                                                                     (move.endRow, enPassantCol),self.board), 
+                                                                     player):
+                                        return (-1,-1) 
+                            return (currRow, currCol)
+                    else:
+                        if piece == 3 * player or piece == 5 * player:
+                            #Check for Double discovered check (extremely rare)
+                            if move.isEnPassantMove:
+                                enPassantRow = move.endRow + player
+                                enPassantCol = move.endCol
+                                if (enPassantRow, enPassantCol) in self.info.checkSquares[3]:
+                                    if self.discoveredCheck(Move((enPassantRow, enPassantCol), 
+                                                                     (move.endRow, enPassantCol),self.board), 
+                                                                     player):
+                                        return (-1,-1) 
+                            return (currRow, currCol)
+                    break
+            else:
+                break
+        if move.isEnPassantMove:
+            #Check for single discovered check via en passant
+            enPassantRow = move.endRow + player
+            enPassantCol = move.endCol
+            if (enPassantRow, enPassantCol) in self.info.checkSquares[3]: # Single discovered check via en passant
+                return self.discoveredCheck(Move((enPassantRow, enPassantCol), (move.endRow, enPassantCol),self.board), player)
+        return None
+
+    def getPawnMoves(self, row, col, player):
+        startRow = 6 if player == 1 else 1
+        if self.board[row - player][col] == 0:
+            move = Move((row, col), (row - player, col), self.board)
+            if not self.isPinned(move, player):
+                if not self.info.inCheck[player] or (row - player, col) in self.info.block_mask[player]:
+                    if row - player == 0 or row - player == 7:
+                        for promoPiece in [5,4,3,2]: # promote to queen, rook, bishop, knight
+                            move = Move((row, col), (row - player, col), self.board)
+                            move.pawnPromotion = promoPiece * player
+                            move.isCheck = (row - player, col) in self.info.checkSquares[promoPiece]
+                            move.discoveredCheck = self.discoveredCheck(move, player)
+                            self.validMoves.append(move)
+                    else:
+                        move.isCheck = (row - player, col) in self.info.checkSquares[1]
+                        move.discoveredCheck = self.discoveredCheck(move, player)
+                        self.validMoves.append(move)
+                if row == startRow and self.board[row - 2 * player][col] == 0:
+                    move = Move((row, col), (row - 2 * player, col), self.board)
+                    if not self.info.inCheck[player] or (row - 2 * player, col) in self.info.block_mask[player]:
+                        move.isCheck = (row - 2 * player, col) in self.info.checkSquares[1]
+                        move.discoveredCheck = self.discoveredCheck(move, player)
+                        self.validMoves.append(move)
+        for dc in [-1, 1]:
+            if 0 <= col + dc < 8:
+                if self.board[row - player][col + dc] * player < 0:
+                    move = Move((row, col), (row - player, col + dc), self.board)
+                    if not self.isPinned(move, player):
+                        if not self.info.inCheck[player] or (row - player, col + dc) in self.info.block_mask[player]:
+                            if row - player == 0 or row - player == 7:
+                                for promoPiece in [5,4,3,2]: # promote to queen, rook, bishop, knight
+                                    move = Move((row, col), (row - player, col + dc), self.board)
+                                    move.pawnPromotion = promoPiece * player
+                                    move.isCheck = (row - player, col + dc) in self.info.checkSquares[promoPiece]
+                                    move.discoveredCheck = self.discoveredCheck(move, player)
+                                    self.validMoves.append(move)
+                            else:
+                                move.isCheck = (row - player, col + dc) in self.info.checkSquares[1]
+                                move.discoveredCheck = self.discoveredCheck(move, player)
+                                self.validMoves.append(move)
+                elif (row - player, col + dc) == self.info.enPassantPossible:
+                    move = Move((row, col), (row - player, col + dc), self.board)
+                    move.isEnPassantMove = True
+                    move.pieceCaptured = -1 * player
+                    if self.checkMoveSafety(move, player):
+                        self.validMoves.append(move)
+    
+    def getKnightMoves(self, row, col, player):
+        knightMoves = [(-2, -1), (-2, 1), (-1, -2), (-1, 2), (1, -2), (1, 2), (2, -1), (2, 1)]
+        #Return if pinned
+        if self.isPinned(Move((row, col), (row, col), self.board), player):
+            return
+        for moveOffset in knightMoves:
+            endRow = row + moveOffset[0]
+            endCol = col + moveOffset[1]
+            if 0 <= endRow < 8 and 0 <= endCol < 8 and self.board[endRow][endCol] * player <= 0:
+                move = Move((row, col), (endRow, endCol), self.board)
+                if not self.info.inCheck[player] or (endRow, endCol) in self.info.block_mask[player]:
+                    move.isCheck = (endRow, endCol) in self.info.checkSquares[2]
+                    move.discoveredCheck = self.discoveredCheck(move, player)
+                    self.validMoves.append(move)
+    
+    def getRayMoves(self, row, col, player, piece):
+        if abs(piece) == 3: #Bishop
+            directions = [(-1, -1), (-1, 1), (1, -1), (1, 1)]
+        elif abs(piece) == 4: #Rook
+            directions = [(-1, 0), (1, 0), (0, -1), (0, 1)]
+        elif abs(piece) == 5: #Queen
+            directions = [(-1, -1), (-1, 1), (1, -1), (1, 1), (-1, 0), (1, 0), (0, -1), (0, 1)]
+        else:
+            return
+        for direction in directions:
+            currRow, currCol = row + direction[0], col + direction[1]
+            if 0 <= currRow < 8 and 0 <= currCol < 8:
+                if self.board[currRow][currCol] * player > 0:
+                    continue
+                move = Move((row, col), (currRow, currCol), self.board)
+                if not self.isPinned(move, player):
+                    if not self.info.inCheck[player] or (currRow, currCol) in self.info.block_mask[player]:
+                        move.isCheck = (currRow, currCol) in self.info.checkSquares[abs(piece)]
+                        move.discoveredCheck = self.discoveredCheck(move, player)
+                        self.validMoves.append(move)
+                    if self.board[currRow][currCol] * player < 0:
+                        continue
+                    while True:
+                        currRow += direction[0]
+                        currCol += direction[1]
+                        if 0 <= currRow < 8 and 0 <= currCol < 8:
+                            if self.board[currRow][currCol] * player > 0:
+                                break
+                            move = Move((row, col), (currRow, currCol), self.board)
+                            if not self.info.inCheck[player] or (currRow, currCol) in self.info.block_mask[player]:
+                                move.isCheck = (currRow, currCol) in self.info.checkSquares[abs(piece)]
+                                move.discoveredCheck = self.discoveredCheck(move, player)
+                                self.validMoves.append(move)
+                            if self.board[currRow][currCol] * player < 0:
+                                break
+                        else:
+                            break
+    
+    def getKingMoves(self, row, col, player):
+        kingMoves = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
+        for moveOffset in kingMoves:
+            endRow = row + moveOffset[0]
+            endCol = col + moveOffset[1]
+            if 0 <= endRow < 8 and 0 <= endCol < 8 and self.board[endRow][endCol] * player <= 0:
+                move = Move((row, col), (endRow, endCol), self.board)
+                if self.checkMoveSafety(move, player):
+                    self.validMoves.append(move)
+        if not self.info.inCheck[player]:
+            if self.info.castlingRights[player][0]: #king side
+                if self.board[row][col + 1] == 0 and self.board[row][col + 2] == 0:
+                    if not self.isAttacked(row, col + 1, player) and not self.isAttacked(row, col + 2, player):
+                        move = Move((row, col), (row, col + 2), self.board)
+                        move.isCastlingMove = True
+                        if (row, col + 1) in self.info.checkSquares[4]:
+                            move.isCheck = True
+                        self.validMoves.append(move)
+            if self.info.castlingRights[player][1]: #queen side
+                if self.board[row][col - 1] == 0 and self.board[row][col - 2] == 0 and self.board[row][col - 3] == 0:
+                    if not self.isAttacked(row, col - 1, player) and not self.isAttacked(row, col - 2, player):
+                        move = Move((row, col), (row, col - 2), self.board)
+                        move.isCastlingMove = True
+                        if (row, col - 1) in self.info.checkSquares[4]:
+                            move.isCheck = True
+                        self.validMoves.append(move)
+
+    #Legacy: A more detailed version of isAttacked that also returns the attacking piece and its location
     def findAttackers(self, pieceRow, pieceCol, player):
         #Check if attacked by pawn
         isAttacked = False
@@ -392,237 +820,3 @@ class GameState:
                 else:
                     break
         return isAttacked, attackingPiece, attackingPieceRow, attackingPieceCol
-    
-    def updateKingSafety(self, player):
-        kingRow, kingCol = self.info.kingLocations[player]
-        inCheck, attackingPiece, attackingPieceRow, attackingPieceCol = self.findAttackers(kingRow, kingCol, player)
-        self.info.inCheck[player] = inCheck
-        self.info.block_mask[player] = set()
-        self.info.capture_mask[player] = set()
-        if inCheck and attackingPiece != 7:
-            if attackingPiece in [2, 1, 6]: # knight, pawn, king
-                self.info.capture_mask[player].add((attackingPieceRow, attackingPieceCol))
-            else:
-                # Compute the direction from the king to the attacking piece
-                directionRow = (attackingPieceRow > kingRow) - (attackingPieceRow < kingRow)
-                directionCol = (attackingPieceCol > kingCol) - (attackingPieceCol < kingCol)
-                currRow = kingRow + directionRow
-                currCol = kingCol + directionCol
-                while (currRow, currCol) != (attackingPieceRow, attackingPieceCol):
-                    self.info.block_mask[player].add((currRow, currCol))
-                    currRow += directionRow
-                    currCol += directionCol
-                self.info.capture_mask[player].add((attackingPieceRow, attackingPieceCol))
-                
-    def updateAllValidMoves(self): #Generates all valid moves for the current player and detects dead positions
-        self.validMoves = []
-        if self.info.winner is not None:
-            return
-        pieces = []
-        possibleDead = True
-        bishopColorBlack = None
-        bishopColorWhite = None
-        for r in range(8):
-            for c in range(8):
-                if self.board[r][c] != 0:
-                    if possibleDead:
-                        pieces.append(self.board[r][c])
-                        if len(pieces) > 4:
-                            possibleDead = False
-                        elif abs(self.board[r][c]) == 5 or abs(self.board[r][c]) ==4 or abs(self.board[r][c]) ==1:
-                            possibleDead = False
-                        elif self.board[r][c] == -3:
-                            bishopColorBlack = (r + c) % 2
-                        elif self.board[r][c] == 3:
-                            bishopColorWhite = (r + c) % 2
-                    if (self.board[r][c] > 0) == (self.player > 0):
-                        self.updateValidMoves((r, c))
-        #Check for dead position (insufficient material)
-        if possibleDead:
-            if len(pieces) == 2: #K vs K
-                self.info.winner = 0 # Draw
-                self.validMoves = []
-            else:
-                pieces.sort()
-                # K vs K + N or K vs K + B
-                if len(pieces) == 3 and (pieces == [-6, 3, 6] or pieces == [-6, -3, 6] or pieces == [-6, 2, 6] or pieces == [-6, -2, 6]):
-                    self.info.winner = 0 # Draw
-                    self.validMoves = []
-                # K + B vs K + B (both bishops on same color)
-                elif pieces == [-6, -3, 3, 6]:
-                    if bishopColorBlack == bishopColorWhite:
-                        self.info.winner = 0 # Draw
-                        self.validMoves = []
-    
-    def updateValidMoves(self, position):
-        row, col = position
-        piece = self.board[row][col]
-        if piece == 0 or (piece > 0) != (self.player > 0):
-            return [] # No piece or not the player's piece
-        if self.info.inCheck[self.player] and not self.info.capture_mask[self.player] and not self.info.block_mask[self.player]:
-            if piece == 6 or piece == -6:
-                return self.getKingMoves(row, col, self.player)
-            return [] # In double check, only king moves allowed
-        if abs(piece) == 1:
-            return self.getPawnMoves(row, col, self.player)
-        if abs(piece) == 2:
-            return self.getKnightMoves(row, col, self.player)
-        if abs(piece) == 3 or abs(piece) == 4 or abs(piece) == 5:
-            return self.getRayMoves(row, col, self.player, piece)
-        if abs(piece) == 6:
-            return self.getKingMoves(row, col, self.player)
-        return []
-    
-    def checkMoveSafety(self, move: Move, player):
-        self.board[move.startRow][move.startCol] = 0
-        self.board[move.endRow][move.endCol] = move.pieceMoved
-        if move.isEnPassantMove:
-            self.board[move.endRow + player][move.endCol] = 0
-        if move.pieceMoved == 6 or move.pieceMoved == -6:
-            kingRow, kingCol = move.endRow, move.endCol
-        else:
-            kingRow, kingCol = self.info.kingLocations[player]
-        inCheck = self.isAttacked(kingRow, kingCol, player)
-        if move.isEnPassantMove:
-            self.board[move.endRow + player][move.endCol] = move.pieceCaptured
-            self.board[move.endRow][move.endCol] = 0
-        else:
-            self.board[move.endRow][move.endCol] = move.pieceCaptured
-        self.board[move.startRow][move.startCol] = move.pieceMoved
-        return not inCheck
-
-    def getPawnMoves(self, row, col, player):
-        startRow = 6 if player == 1 else 1
-        if self.board[row - player][col] == 0:
-            move = Move((row, col), (row - player, col), self.board)
-            if self.checkMoveSafety(move, player):
-                if row - player == 0 or row - player == 7:
-                    for promoPiece in [5,4,3,2]: # promote to queen, rook, bishop, knight
-                        move = Move((row, col), (row - player, col), self.board)
-                        move.pawnPromotion = promoPiece * player
-                        self.validMoves.append(move)
-                else:
-                    self.validMoves.append(move)
-            if row == startRow and self.board[row - 2 * player][col] == 0:
-                move = Move((row, col), (row - 2 * player, col), self.board)
-                if self.checkMoveSafety(move, player):
-                    self.validMoves.append(move)
-        for dc in [-1, 1]:
-            if 0 <= col + dc < 8:
-                if self.board[row - player][col + dc] * player < 0:
-                    move = Move((row, col), (row - player, col + dc), self.board)
-                    if self.checkMoveSafety(move, player):
-                        if row - player == 0 or row - player == 7:
-                            for promoPiece in [5,4,3,2]: # promote to queen, rook, bishop, knight
-                                move = Move((row, col), (row - player, col + dc), self.board)
-                                move.pawnPromotion = promoPiece * player
-                                self.validMoves.append(move)
-                        else:
-                            self.validMoves.append(move)
-                elif (row - player, col + dc) == self.info.enPassantPossible:
-                    move = Move((row, col), (row - player, col + dc), self.board)
-                    move.isEnPassantMove = True
-                    move.pieceCaptured = -1 * player
-                    if self.checkMoveSafety(move, player):
-                        self.validMoves.append(move)
-    
-    def getKnightMoves(self, row, col, player):
-        knightMoves = [(-2, -1), (-2, 1), (-1, -2), (-1, 2), (1, -2), (1, 2), (2, -1), (2, 1)]
-        if self.info.inCheck[player]: #While in check skip moves that don't block or capture
-            for moveOffset in knightMoves:
-                endRow = row + moveOffset[0]
-                endCol = col + moveOffset[1]
-                if 0 <= endRow < 8 and 0 <= endCol < 8 and self.board[endRow][endCol] * player <= 0:
-                    move = Move((row, col), (endRow, endCol), self.board)
-                    if (endRow, endCol) in self.info.capture_mask[player] or (endRow, endCol) in self.info.block_mask[player]:
-                        if self.checkMoveSafety(move, player):
-                            self.validMoves.append(move)
-        else: #While not in check, if one is safe (not pinned), we can skip safety checks for all moves
-            checkedSafety = False
-            for moveOffset in knightMoves:
-                endRow = row + moveOffset[0]
-                endCol = col + moveOffset[1]
-                if 0 <= endRow < 8 and 0 <= endCol < 8 and self.board[endRow][endCol] * player <= 0:
-                    move = Move((row, col), (endRow, endCol), self.board)
-                    if not checkedSafety:
-                        if self.checkMoveSafety(move, player):
-                            checkedSafety = True
-                            self.validMoves.append(move)
-                        else: #not safe, piece is pinned, no other moves are valid
-                            break
-                    else:
-                        self.validMoves.append(move)
-    
-    def getRayMoves(self, row, col, player, piece):
-        if abs(piece) == 3: #Bishop
-            directions = [(-1, -1), (-1, 1), (1, -1), (1, 1)]
-        elif abs(piece) == 4: #Rook
-            directions = [(-1, 0), (1, 0), (0, -1), (0, 1)]
-        elif abs(piece) == 5: #Queen
-            directions = [(-1, -1), (-1, 1), (1, -1), (1, 1), (-1, 0), (1, 0), (0, -1), (0, 1)]
-        else:
-            return
-        if self.info.inCheck[player]: #While in check skip moves that don't block or capture
-            for direction in directions:
-                currRow, currCol = row, col
-                while True:
-                    currRow += direction[0]
-                    currCol += direction[1]
-                    if 0 <= currRow < 8 and 0 <= currCol < 8:
-                        if self.board[currRow][currCol] * player > 0:
-                            break
-                        if (currRow, currCol) in self.info.capture_mask[player] or (currRow, currCol) in self.info.block_mask[player]:
-                            move = Move((row, col), (currRow, currCol), self.board)
-                            if self.checkMoveSafety(move, player):
-                                self.validMoves.append(move)
-                            break
-                        if self.board[currRow][currCol] * player < 0:
-                            break
-                    else:
-                        break
-        else: #While not in check, for all directions, if the first step is safe (not pinned), we can skip safety checks for all moves in that direction
-            for direction in directions:
-                currRow, currCol = row + direction[0], col + direction[1]
-                if 0 <= currRow < 8 and 0 <= currCol < 8:
-                    if self.board[currRow][currCol] * player > 0:
-                        continue
-                    move = Move((row, col), (currRow, currCol), self.board)
-                    if self.checkMoveSafety(move, player):
-                        self.validMoves.append(move)
-                        if self.board[currRow][currCol] * player < 0:
-                            continue
-                        while True:
-                            currRow += direction[0]
-                            currCol += direction[1]
-                            if 0 <= currRow < 8 and 0 <= currCol < 8:
-                                if self.board[currRow][currCol] * player > 0:
-                                    break
-                                move = Move((row, col), (currRow, currCol), self.board)
-                                self.validMoves.append(move)
-                                if self.board[currRow][currCol] * player < 0:
-                                    break
-                            else:
-                                break
-    
-    def getKingMoves(self, row, col, player):
-        kingMoves = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
-        for moveOffset in kingMoves:
-            endRow = row + moveOffset[0]
-            endCol = col + moveOffset[1]
-            if 0 <= endRow < 8 and 0 <= endCol < 8 and self.board[endRow][endCol] * player <= 0:
-                move = Move((row, col), (endRow, endCol), self.board)
-                if self.checkMoveSafety(move, player):
-                    self.validMoves.append(move)
-        if not self.info.inCheck[player]:
-            if self.info.castlingRights[player][0]: #king side
-                if self.board[row][col + 1] == 0 and self.board[row][col + 2] == 0:
-                    if not self.isAttacked(row, col + 1, player) and not self.isAttacked(row, col + 2, player):
-                        move = Move((row, col), (row, col + 2), self.board)
-                        move.isCastlingMove = True
-                        self.validMoves.append(move)
-            if self.info.castlingRights[player][1]: #queen side
-                if self.board[row][col - 1] == 0 and self.board[row][col - 2] == 0 and self.board[row][col - 3] == 0:
-                    if not self.isAttacked(row, col - 1, player) and not self.isAttacked(row, col - 2, player):
-                        move = Move((row, col), (row, col - 2), self.board)
-                        move.isCastlingMove = True
-                        self.validMoves.append(move)

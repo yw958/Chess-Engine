@@ -37,7 +37,7 @@ def main():
     flipped = False
     engine = ChessEngine.Engine()
     engineEnabled = 0
-    engineDepth = 6
+    engineDepth = 5
     moveLogFont = p.font.SysFont("", 20, False, False)
     drawGameState(screen, gs, flipped, moveLogFont, engineEnabled)
     while running:
