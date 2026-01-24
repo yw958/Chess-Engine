@@ -547,8 +547,8 @@ class GameState:
         directionCol = (move.startCol > kingCol) - (move.startCol < kingCol)
         moveDirRow = (move.endRow > move.startRow) - (move.endRow < move.startRow)
         moveDirCol = (move.endCol > move.startCol) - (move.endCol < move.startCol)
-        if (directionRow, directionCol) == (moveDirRow, moveDirCol) or (
-            directionRow, directionCol) == (-moveDirRow, -moveDirCol):
+        if abs(move.pieceMoved)!=2 and ((directionRow, directionCol) == (moveDirRow, moveDirCol) or (
+            directionRow, directionCol) == (-moveDirRow, -moveDirCol)):
             return None # Moving away or along the line, no discovered check
         currRow, currCol = move.startRow, move.startCol
         while True:
@@ -640,8 +640,11 @@ class GameState:
                     move = Move((row, col), (row - player, col + dc), self.board)
                     move.isEnPassantMove = True
                     move.pieceCaptured = -1 * player
-                    if self.checkMoveSafety(move, player):
-                        self.validMoves.append(move)
+                    if not self.isPinned(move, player):
+                        if not self.info.inCheck[player] or (row - player, col + dc) in self.info.block_mask[player]:
+                            move.isCheck = (row - player, col + dc) in self.info.checkSquares[1]
+                            move.discoveredCheck = self.discoveredCheck(move, player)
+                            self.validMoves.append(move)
     
     def getKnightMoves(self, row, col, player):
         knightMoves = [(-2, -1), (-2, 1), (-1, -2), (-1, 2), (1, -2), (1, 2), (2, -1), (2, 1)]
