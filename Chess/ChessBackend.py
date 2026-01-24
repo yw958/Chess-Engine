@@ -89,35 +89,67 @@ class GameState:
         self.boardHistory = []
         self.boardCounter = {}
         self.validMoves = []
-        boardRep = self.boardRepresentation()
+        boardRep = self.scanAndUpdate()
         self.boardCounter[boardRep] = 1
         self.boardHistory.append(boardRep)
-        self.updateAllValidMoves()
-    
-    def boardRepresentation(self):
-        # --- piece placement ---
-        ranks = []
-        for row in self.board:
+
+    def scanAndUpdate(self):
+        """
+        Does all the updates that require board scanning in one pass.
+        Update board representation, evaluation, and valid moves. Also check for dead positions.
+        Note: the score update is not final. Game status will be updated again after move generation.
+        Return a string representation of the board for repetition detection.
+        """
+        ranks_str = []
+        self.validMoves = []
+        score = 0
+        pieces = []
+        possibleDead = True
+        bishopColorBlack = None
+        bishopColorWhite = None
+        player = self.player
+        fac = 0.1 # factor for positional score
+        for r in range(8):
             parts = []
             empty = 0
-            for sq in row:
+            for c in range(8):
+                sq = self.board[r][c]
                 if sq == 0:
                     empty += 1
                 else:
+                    #Update parts for FEN
+                    parts.append(PieceTables.PIECES[sq])
+                    #Update Score
+                    posScore = 0
                     if empty:
                         parts.append(str(empty))
                         empty = 0
-                    parts.append(PieceTables.PIECES[sq])
+                    if abs(sq) != 6:
+                        posScore = PieceTables.positionalScores[sq][r][c] * fac
+                    score += ( PieceTables.VALUES[abs(sq)] + posScore ) * (1 if sq > 0 else -1)
+                    # Check for dead position
+                    if possibleDead:
+                        pieces.append(self.board[r][c])
+                        if len(pieces) > 4:
+                            possibleDead = False
+                        elif abs(self.board[r][c]) == 5 or (abs(self.board[r][c]) ==4 
+                        or abs(self.board[r][c]) ==1):
+                            possibleDead = False
+                        elif self.board[r][c] == -3:
+                            bishopColorBlack = (r + c) % 2
+                        elif self.board[r][c] == 3:
+                            bishopColorWhite = (r + c) % 2
+                    # Update valid moves for the player to move
+                    if (self.board[r][c] > 0) == (player > 0):
+                        self.updateValidMoves((r, c))
+            #Finish board representation for the current rank
             if empty:
                 parts.append(str(empty))
-            ranks.append(''.join(parts))
-        placement = '/'.join(ranks)
-
-        # --- side to move ---
+            ranks_str.append(''.join(parts))
+        #Finish board representation
+        placement = '/'.join(ranks_str)
         stm = 'w' if self.player == 1 else 'b'
-
         # --- castling rights ---
-        # Your layout: castlingRights[index] = (kingside, queenside)
         # index 1 -> white, index 2 -> black (since index 0 unused)
         w_k, w_q = self.info.castlingRights[1]
         b_k, b_q = self.info.castlingRights[2]
@@ -127,7 +159,6 @@ class GameState:
         if b_k: castle_parts.append('k')
         if b_q: castle_parts.append('q')
         castling = ''.join(castle_parts) if castle_parts else '-'
-
         # --- en passant target square ---
         # enPassantPossible is () or (row, col)
         if self.info.enPassantPossible:
@@ -135,8 +166,29 @@ class GameState:
             ep = f"{chr(ord('a') + c)}{8 - r}"
         else:
             ep = '-'
-
-        return f"{placement} {stm} {castling} {ep}"
+        #Update eval
+        self.info.eval = score
+        #Check for dead position (insufficient material)
+        if possibleDead:
+            if len(pieces) == 2: #K vs K
+                self.info.winner = 0 # Draw
+                self.info.eval = 0
+                self.validMoves = []
+            else:
+                pieces.sort()
+                # K vs K + N or K vs K + B
+                if len(pieces) == 3 and (pieces == [-6, 3, 6] or pieces == [-6, -3, 6] 
+                                         or pieces == [-6, 2, 6] or pieces == [-6, -2, 6]):
+                    self.info.winner = 0 # Draw
+                    self.info.eval = 0
+                    self.validMoves = []
+                # K + B vs K + B (both bishops on same color)
+                elif pieces == [-6, -3, 3, 6]:
+                    if bishopColorBlack == bishopColorWhite:
+                        self.info.winner = 0 # Draw
+                        self.info.eval = 0
+                        self.validMoves = []
+        return(f"{placement} {stm} {castling} {ep}")
         
     def makeMove(self, move: Move):
         if (move.pieceMoved > 0) != (self.player > 0):
@@ -145,6 +197,7 @@ class GameState:
         self.board[move.startRow][move.startCol] = 0
         self.board[move.endRow][move.endCol] = move.pieceMoved
         self.moveLog.append(move)
+        #Handle king moves and castling rights
         if abs(move.pieceMoved) == 6:
             self.info.kingLocations[self.player] = (move.endRow, move.endCol)
             if move.isCastlingMove:
@@ -155,11 +208,13 @@ class GameState:
                     self.board[move.endRow][move.endCol + 1] = self.board[move.endRow][0]
                     self.board[move.endRow][0] = 0
             self.info.castlingRights[self.player] = (False, False)
+        #Handle rook moves and castling rights
         elif abs(move.pieceMoved) == 4:
             if move.startCol == 0:
                 self.info.castlingRights[self.player] = (self.info.castlingRights[self.player][0], False)
             elif move.startCol == 7:
                 self.info.castlingRights[self.player] = (False, self.info.castlingRights[self.player][1])
+        #Handle special pawn moves
         elif move.pawnPromotion:
             self.board[move.endRow][move.endCol] = move.pawnPromotion
         elif move.isEnPassantMove:
@@ -167,6 +222,7 @@ class GameState:
         self.info.enPassantPossible = ()
         if abs(move.pieceMoved) == 1 and abs(move.startRow - move.endRow) == 2:
             self.info.enPassantPossible = ( (move.startRow + move.endRow)//2, move.startCol )
+        #Handle rook captures and castling rights
         elif abs(move.pieceCaptured) == 4:
             if move.endCol == 0:
                 self.info.castlingRights[-self.player] = (self.info.castlingRights[-self.player][0], False)
@@ -179,39 +235,32 @@ class GameState:
             self.info.seventyFiveMoveRuleCounter += 1
         if self.info.seventyFiveMoveRuleCounter >= 150:
             self.info.winner = 0 # Draw by 75-move rule
+            self.info.eval = 0
         self.player *= -1 # switch players
-        boardRepresentation = self.boardRepresentation()
+        self.updateKingSafety(self.player, move)
+        #Scan for all moves and get board representation
+        boardRepresentation = self.scanAndUpdate()
+        # Update repetition counter and check for fivefold repetition
         count = self.boardCounter.get(boardRepresentation, 0)
         count += 1
         self.boardCounter[boardRepresentation] = count
         if count >= 5:
             self.info.winner = 0 # Draw by fivefold repetition
-        self.boardHistory.append(boardRepresentation)     
-        self.updateKingSafety(self.player, move)
-        self.updateAllValidMoves()
-        if not self.validMoves:
-            if self.info.inCheck[self.player]:
-                self.info.winner = -self.player # Checkmate
-            else:
-                self.info.winner = 0 # Stalemate (draw)
-        self.updateEval(move)
-    
-    def updateEval(self, move: Move):
-        if self.info.winner is not None:
-            if self.info.winner == 1:
-                self.info.eval = float('inf')
-            elif self.info.winner == -1:
-                self.info.eval = float('-inf')
-            else:
-                self.info.eval = 0
-            return
-        # Update evaluation based on last move
-        pieceCapture = move.pieceCaptured
-        pawnPromotion = move.pawnPromotion
-        if pieceCapture != 0:
-            self.info.eval += PieceTables.VALUES[abs(pieceCapture)] * (-self.player)
-        if pawnPromotion != 0:
-            self.info.eval += (PieceTables.VALUES[abs(pawnPromotion)] - 1) * (-self.player)
+            self.info.eval = 0
+        #Update board history
+        self.boardHistory.append(boardRepresentation)   
+
+        if self.info.winner is None:
+            if not self.validMoves:
+                if self.info.inCheck[self.player]:
+                    self.info.winner = -self.player # Checkmate
+                    self.info.eval = float('inf') * (-self.player)
+                else:
+                    self.info.winner = 0 # Stalemate (draw)
+                    self.info.eval = 0
+        else:
+            self.validMoves = []
+
         
     def undoMove(self, reCalculateMoves = True):
         if len(self.moveLog) == 0:
@@ -241,7 +290,7 @@ class GameState:
                         self.board[move.endRow][0] = self.board[move.endRow][move.endCol + 1]
                         self.board[move.endRow][move.endCol + 1] = 0
         if reCalculateMoves:
-            self.updateAllValidMoves()
+            self.scanAndUpdate()
     
     # Return True if the square is attacked by opponent pieces
     def isAttacked(self, pieceRow, pieceCol, player):
@@ -415,46 +464,6 @@ class GameState:
                         break
                 else:
                     break
-
-    def updateAllValidMoves(self): #Generates all valid moves for the current player and detects dead positions
-        self.validMoves = []
-        if self.info.winner is not None:
-            return
-        pieces = []
-        possibleDead = True
-        bishopColorBlack = None
-        bishopColorWhite = None
-        for r in range(8):
-            for c in range(8):
-                if self.board[r][c] != 0:
-                    if possibleDead:
-                        pieces.append(self.board[r][c])
-                        if len(pieces) > 4:
-                            possibleDead = False
-                        elif abs(self.board[r][c]) == 5 or abs(self.board[r][c]) ==4 or abs(self.board[r][c]) ==1:
-                            possibleDead = False
-                        elif self.board[r][c] == -3:
-                            bishopColorBlack = (r + c) % 2
-                        elif self.board[r][c] == 3:
-                            bishopColorWhite = (r + c) % 2
-                    if (self.board[r][c] > 0) == (self.player > 0):
-                        self.updateValidMoves((r, c))
-        #Check for dead position (insufficient material)
-        if possibleDead:
-            if len(pieces) == 2: #K vs K
-                self.info.winner = 0 # Draw
-                self.validMoves = []
-            else:
-                pieces.sort()
-                # K vs K + N or K vs K + B
-                if len(pieces) == 3 and (pieces == [-6, 3, 6] or pieces == [-6, -3, 6] or pieces == [-6, 2, 6] or pieces == [-6, -2, 6]):
-                    self.info.winner = 0 # Draw
-                    self.validMoves = []
-                # K + B vs K + B (both bishops on same color)
-                elif pieces == [-6, -3, 3, 6]:
-                    if bishopColorBlack == bishopColorWhite:
-                        self.info.winner = 0 # Draw
-                        self.validMoves = []
     
     def updateValidMoves(self, position):
         row, col = position

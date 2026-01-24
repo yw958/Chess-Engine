@@ -38,6 +38,8 @@ def main():
     engine = ChessEngine.Engine()
     engineEnabled = 0
     engineDepth = 5
+    qplyLimit = 8
+    engine.qplyLimit = qplyLimit
     moveLogFont = p.font.SysFont("", 20, False, False)
     drawGameState(screen, gs, flipped, moveLogFont, engineEnabled)
     while running:

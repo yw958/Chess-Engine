@@ -10,6 +10,7 @@ class Engine:
         self.nodesFromMemo = 0
         self.nodesQSearched = 0
         self.memo = {}
+        self.qplyLimit = 8
 
     def negamax(self, gameState: ChessBackend.GameState, depth: int, alpha: float, beta: float, color: int) -> float:
         """
@@ -24,7 +25,7 @@ class Engine:
             self.nodesFromMemo += 1
             return self.memo[(boardRep, depth)]
         if depth == 0 or gameState.info.winner is not None:
-            return self.qSearch(gameState, alpha, beta, color)
+            return self.qSearch(gameState, alpha, beta, color, self.qplyLimit)
         allMoves = gameState.validMoves.copy()
         self.sortMoves(allMoves)
         best = float("-inf")
@@ -84,7 +85,7 @@ class Engine:
             return value
         moves.sort(key=moveValue, reverse=True)
 
-    def qSearch(self, gs: ChessBackend.GameState, alpha, beta, color, qply_limit=20):
+    def qSearch(self, gs: ChessBackend.GameState, alpha, beta, color, qply_limit):
         """
         Quiescence search to extend the search in volatile positions.
         """
