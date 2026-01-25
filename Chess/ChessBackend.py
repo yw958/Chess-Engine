@@ -2,7 +2,7 @@
 Contains the core logic for representing the chess game state, making and undoing moves,
 and generating valid moves.
 """
-from PieceTables import PieceTables
+from .PieceTables import PieceTables
 class Move:
     def __init__(self, startSq, endSq, board):
         self.startRow = startSq[0]

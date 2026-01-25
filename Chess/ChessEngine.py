@@ -2,7 +2,7 @@
 Contains the chess engine implementing a negamax algorithm with alpha-beta pruning
 """
 import ChessBackend
-from PieceTables import PieceTables
+from .PieceTables import PieceTables
 
 class Engine:
     def __init__(self):
