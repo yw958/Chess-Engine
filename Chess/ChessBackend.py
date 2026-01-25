@@ -717,6 +717,7 @@ class GameState:
             if 0 <= endRow < 8 and 0 <= endCol < 8 and self.board[endRow][endCol] * player <= 0:
                 move = Move((row, col), (endRow, endCol), self.board)
                 if self.checkMoveSafety(move, player):
+                    move.discoveredCheck = self.discoveredCheck(move, player)
                     self.validMoves.append(move)
         if not self.info.inCheck[player]:
             if self.info.castlingRights[player][0]: #king side
@@ -725,7 +726,7 @@ class GameState:
                         move = Move((row, col), (row, col + 2), self.board)
                         move.isCastlingMove = True
                         if (row, col + 1) in self.info.checkSquares[4]:
-                            move.isCheck = True
+                            move.discoveredCheck = (row, col + 1)
                         self.validMoves.append(move)
             if self.info.castlingRights[player][1]: #queen side
                 if self.board[row][col - 1] == 0 and self.board[row][col - 2] == 0 and self.board[row][col - 3] == 0:
@@ -733,7 +734,7 @@ class GameState:
                         move = Move((row, col), (row, col - 2), self.board)
                         move.isCastlingMove = True
                         if (row, col - 1) in self.info.checkSquares[4]:
-                            move.isCheck = True
+                            move.discoveredCheck = (row, col - 1)
                         self.validMoves.append(move)
 
     #Legacy: A more detailed version of isAttacked that also returns the attacking piece and its location
