@@ -2,7 +2,7 @@
 Contains the core logic for representing the chess game state, making and undoing moves,
 and generating valid moves.
 """
-from .PieceTables import PieceTables
+from PieceTables import PieceTables
 class Move:
     def __init__(self, startSq, endSq, board):
         self.startRow = startSq[0]
@@ -660,6 +660,7 @@ class GameState:
         if self.isPinned(Move((row, col), (row, col), self.board), player):
             return
         inCheck = self.info.inCheck[player]
+        discoveredCheck = self.discoveredCheck(Move((row, col), (row, col), self.board), player)
         for moveOffset in knightMoves:
             endRow = row + moveOffset[0]
             endCol = col + moveOffset[1]
@@ -667,7 +668,7 @@ class GameState:
                 move = Move((row, col), (endRow, endCol), self.board)
                 if not inCheck or (endRow, endCol) in self.info.block_mask[player]:
                     move.isCheck = (endRow, endCol) in self.info.checkSquares[2]
-                    move.discoveredCheck = self.discoveredCheck(move, player)
+                    move.discoveredCheck = discoveredCheck
                     self.validMoves.append(move)
     
     def getRayMoves(self, row, col, player, piece):
@@ -687,9 +688,10 @@ class GameState:
                     continue
                 move = Move((row, col), (currRow, currCol), self.board)
                 if not self.isPinned(move, player):
+                    discoveredCheck = abs(piece) != 5 and self.discoveredCheck(move, player) # queen can't give discovered check
                     if not inCheck or (currRow, currCol) in self.info.block_mask[player]:
                         move.isCheck = (currRow, currCol) in self.info.checkSquares[abs(piece)]
-                        move.discoveredCheck = self.discoveredCheck(move, player)
+                        move.discoveredCheck = discoveredCheck
                         self.validMoves.append(move)
                     if self.board[currRow][currCol] * player < 0:
                         continue
@@ -702,7 +704,7 @@ class GameState:
                             move = Move((row, col), (currRow, currCol), self.board)
                             if not inCheck or (currRow, currCol) in self.info.block_mask[player]:
                                 move.isCheck = (currRow, currCol) in self.info.checkSquares[abs(piece)]
-                                move.discoveredCheck = self.discoveredCheck(move, player)
+                                move.discoveredCheck = discoveredCheck
                                 self.validMoves.append(move)
                             if self.board[currRow][currCol] * player < 0:
                                 break

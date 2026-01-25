@@ -1,12 +1,16 @@
 # Chess Engine (Python)
 
-A Python chess framework that includes backend logic, a graphical user interface, and a negamax engine with alpha-beta pruning.
+A Python chess framework that includes backend logic, a graphical user interface, and a negamax engine with alpha-beta pruning and quiescence search.
 
 ## Instructions
 1. Clone this repository 
-2. Run `python -m pip install -r ./requirements.txt`
-3. Run `python ./Chess/ChessMain.py`
-4. Enjoy the game!
+2. It is recommended to create a virtual environment with python 3.12 or higher:
+    - `python -m venv venv`
+    - On Windows: `.\venv\Scripts\activate`
+    - On macOS/Linux: `source venv/bin/activate`
+3. Install the required packages: `python -m pip install -r ./requirements.txt`
+4. Run `python -m Chess.ChessMain` to start the game.
+5. Enjoy the game!
 
 ## Keyboard Shortcuts
 
@@ -19,7 +23,7 @@ A Python chess framework that includes backend logic, a graphical user interface
 
 - **ChessMain.py**: User interface for the chess game, handling graphics and user interactions. You can adjust engine depth in this file.
 - **ChessBackend.py**: Core logic for representing the chess game state, making/undoing moves, and generating valid moves.
-- **ChessEngine.py**: Chess engine implementing a negamax algorithm with alpha-beta pruning.
+- **ChessEngine.py**: Chess engine implementing a negamax algorithm with alpha-beta pruning and quiescence search.
 
 ## References
 
@@ -29,6 +33,6 @@ A Python chess framework that includes backend logic, a graphical user interface
 The backend logic is original with a significant performance boost compared to the referenced repository. 
 
 ## Future Improvements
-- Implement engine in C++ for performance enhancement, and connect via pybind11.
-- Try Monte Carlo Tree Search (MCTS) for move selection.
-- Optimize move ordering for better alpha-beta pruning efficiency by enabling moves to have check flag.
+- Implement backend in C++ for performance enhancement, and connect via pybind11.
+- Try Monte Carlo Tree Search (MCTS).
+- Implement magic bitboards for faster move generation.
