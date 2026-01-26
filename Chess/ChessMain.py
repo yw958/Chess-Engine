@@ -37,7 +37,7 @@ def main():
     flipped = False
     engine = ChessEngine.Engine()
     engineEnabled = 0
-    engineDepth = 5
+    engineDepth = 4 # Adjust engine search depth here. Depth 5 takes approximately 10s per move on average.
     qplyLimit = 8
     engine.qplyLimit = qplyLimit
     moveLogFont = p.font.SysFont("", 20, False, False)
