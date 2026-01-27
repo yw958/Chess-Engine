@@ -688,7 +688,7 @@ class GameState:
                     continue
                 move = Move((row, col), (currRow, currCol), self.board)
                 if not self.isPinned(move, player):
-                    discoveredCheck = abs(piece) != 5 and self.discoveredCheck(move, player) # queen can't give discovered check
+                    discoveredCheck = None if abs(piece) == 5 else self.discoveredCheck(move, player) # queen can't give discovered check
                     if not inCheck or (currRow, currCol) in self.info.block_mask[player]:
                         move.isCheck = (currRow, currCol) in self.info.checkSquares[abs(piece)]
                         move.discoveredCheck = discoveredCheck
