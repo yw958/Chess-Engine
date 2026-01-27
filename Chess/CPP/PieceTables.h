@@ -4,7 +4,7 @@
 #include <cmath>
 
 namespace PieceTables {
-    using Table8 = std::array<std::array<int8_t, 8>, 8>;
+    using Table8 = std::array<std::array<int, 8>, 8>;
     // --- Piece-square tables (your exact numbers) ---
     inline constexpr Table8 knightScores{{
         {{1,1,1,1,1,1,1,1}},

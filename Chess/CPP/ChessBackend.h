@@ -20,7 +20,7 @@ struct Move {
     int pieceCaptured = 0;
     bool isCastlingMove = false;
     bool isEnPassantMove = false;
-    int  pawnPromotion = 0;
+    int pawnPromotion = 0;
     bool isCheck = false;
     // If discovered check occurs, store square of checking piece
     // (-1,-1) means none, (-2, -2) means en passant double discovery (extremely rare)
@@ -32,17 +32,17 @@ struct Move {
 };
 
 struct Square {
-    uint8_t r;
-    uint8_t c;
-    bool operator==(const Square& other) const {
+    int r, c;
+    int index() const { return r * 8 + c; }
+    bool operator==(const Square& other) const noexcept {
         return r == other.r && c == other.c;
     }
-    Square(int row, int col) : r(static_cast<uint8_t>(row)), c(static_cast<uint8_t>(col)) {}
 };
 
 struct SquareHash {
     size_t operator()(const Square& s) const noexcept {
-        return (s.r << 3) | s.c;
+        // cast to size_t to avoid signed->unsigned surprises
+        return s.r * 8 + s.c;
     }
 };
 
@@ -63,13 +63,13 @@ struct Info {
         std::make_pair(0,4)
     };
     std::array<bool, 3> inCheck{false, false, false};
-    std::array<std::set<int>, 3> block_mask;
+    std::unordered_set<Square, SquareHash> block_mask{};
     std::pair<int,int> enPassantPossible = {-1, -1};
     int winner = 0;  // 1 white, -1 black, 0 none
     int seventyFiveMoveRuleCounter = 0;
     // index 1–5 correspond to piece types
-    std::unordered_set<Square, SquareHash> potentialPins;
-    std::array<std::unordered_set<Square, SquareHash>, 6> checkSquares;
+    std::unordered_set<Square, SquareHash> potentialPins{};
+    std::array<std::unordered_set<Square, SquareHash>, 6> checkSquares{};
     double eval = 0.0;
 };
 
@@ -79,8 +79,7 @@ struct Info {
 
 class GameState {
 public:
-    using Piece = int8_t;
-    using Board = std::array<std::array<Piece, 8>, 8>;
+    using Board = std::array<std::array<int, 8>, 8>;
     GameState();
     // Core update
     std::string scanAndUpdate();
@@ -88,18 +87,18 @@ public:
     void makeMove(const Move& move);
     void undoMove(bool reCalculateMoves = true);
     // Attack / legality
-    bool isAttacked(int row, int col, int player) const;
-    void updateKingSafety(int player, const Move& move);
-    void updateCheckSquares(int player);
-    void updateValidMoves(int position);
-    bool checkMoveSafety(const Move& move, int player);
-    bool isPinned(const Move& move, int player) const;
-    bool discoveredCheck(const Move& move, int player) const;
+    bool isAttacked(int row, int col) const;
+    void updateKingSafety(const Move& move);
+    void updateCheckSquares();
+    void updateValidMoves(int row, int col);
+    bool checkMoveSafety(const Move& move);
+    bool isPinned(const Move& move) const;
+    std::pair<int,int> discoveredCheck(const Move& move) const;
     // Move generation
-    void getPawnMoves(int row, int col, int player, std::vector<Move>& out) const;
-    void getKnightMoves(int row, int col, int player, std::vector<Move>& out) const;
-    void getRayMoves(int row, int col, int player, int piece, std::vector<Move>& out) const;
-    void getKingMoves(int row, int col, int player, std::vector<Move>& out);
+    void getPawnMoves(int row, int col, std::vector<Move>& out) const;
+    void getKnightMoves(int row, int col, std::vector<Move>& out) const;
+    void getRayMoves(int row, int col, int piece, std::vector<Move>& out) const;
+    void getKingMoves(int row, int col, std::vector<Move>& out);
 
 private:
     static constexpr bool inBounds(int r, int c) {
