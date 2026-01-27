@@ -99,7 +99,9 @@ public:
     void getKnightMoves(int row, int col, std::vector<Move>& out) const;
     void getRayMoves(int row, int col, int piece, std::vector<Move>& out) const;
     void getKingMoves(int row, int col, std::vector<Move>& out);
-
+    // Accessors
+    const Info& info() const { return info_; }
+    const std::vector<Move>& validMoves() const { return validMoves_; }
 private:
     static constexpr bool inBounds(int r, int c) {
         return r >= 0 && r < 8 && c >= 0 && c < 8;
