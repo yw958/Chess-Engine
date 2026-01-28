@@ -65,7 +65,7 @@ struct Info {
     std::array<bool, 3> inCheck{false, false, false};
     std::unordered_set<Square, SquareHash> block_mask{};
     std::pair<int,int> enPassantPossible = {-1, -1};
-    int winner = 0;  // 1 white, -1 black, 0 none
+    int winner = 2;  // 1 white, -1 black, 0 draw, 2 ongoing
     int seventyFiveMoveRuleCounter = 0;
     // index 1–5 correspond to piece types
     std::unordered_set<Square, SquareHash> potentialPins{};
@@ -95,10 +95,10 @@ public:
     bool isPinned(const Move& move) const;
     std::pair<int,int> discoveredCheck(const Move& move) const;
     // Move generation
-    void getPawnMoves(int row, int col, std::vector<Move>& out) const;
-    void getKnightMoves(int row, int col, std::vector<Move>& out) const;
-    void getRayMoves(int row, int col, int piece, std::vector<Move>& out) const;
-    void getKingMoves(int row, int col, std::vector<Move>& out);
+    void getPawnMoves(int row, int col);
+    void getKnightMoves(int row, int col);
+    void getRayMoves(int row, int col, int piece);
+    void getKingMoves(int row, int col);
     // Accessors
     const Info& info() const { return info_; }
     const std::vector<Move>& validMoves() const { return validMoves_; }

@@ -323,7 +323,7 @@ void GameState::makeMove(const Move& move) {
         info_.eval = 0;
     }
     boardHistory_.push_back(boardRep);
-    const bool ongoing = (info_.winner == 99);
+    const bool ongoing = (info_.winner == 2);
     if (ongoing) {
         if (validMoves_.empty()) {
             const int stmIdx = sideIndex(player_);
@@ -635,18 +635,18 @@ void GameState::updateValidMoves(int row, int col) {
     // Double check: in check AND blockMask is empty => only king moves allowed
     if (info_.inCheck[idx] && info_.block_mask.empty()) {
         if (std::abs(piece) == 6) {
-            getKingMoves(row, col, validMoves_);
+        getKingMoves(row, col);
         }
         return;
     }
     if (std::abs(piece) == 1) {
-        getPawnMoves(row, col, validMoves_);
+        getPawnMoves(row, col);
     } else if (std::abs(piece) == 2) {
-        getKnightMoves(row, col, validMoves_);
+        getKnightMoves(row, col);
     } else if (std::abs(piece) == 3 || std::abs(piece) == 4 || std::abs(piece) == 5) {
-        getRayMoves(row, col, piece, validMoves_);
+        getRayMoves(row, col, piece);
     } else if (std::abs(piece) == 6) {
-        getKingMoves(row, col, validMoves_);
+        getKingMoves(row, col);
     }
 }
 
@@ -853,7 +853,7 @@ std::pair<int,int> GameState::discoveredCheck(const Move& move) const {
     return {-1, -1};
 }
 
-void GameState::getPawnMoves(int row, int col, std::vector<Move>& out) const {
+void GameState::getPawnMoves(int row, int col) {
     const int player = player_;
     const int idx = sideIndex(player);
     const bool inCheck = info_.inCheck[idx];
@@ -874,12 +874,12 @@ void GameState::getPawnMoves(int row, int col, std::vector<Move>& out) const {
                         pm.pawnPromotion = p * player;
                         pm.isCheck = inSet(info_.checkSquares[p], oneStepRow, col);
                         pm.discoveredCheck = discoveredCheck(pm);
-                        out.push_back(std::move(pm));
+                        validMoves_.push_back(std::move(pm));
                     }
                 } else {
                     m.isCheck = inSet(info_.checkSquares[1], oneStepRow, col);
                     m.discoveredCheck = discoveredCheck(m);
-                    out.push_back(std::move(m));
+                    validMoves_.push_back(std::move(m));
                 }
             }
             // Two-step from starting rank (only if 1-step was empty and we are on startRow)
@@ -889,7 +889,7 @@ void GameState::getPawnMoves(int row, int col, std::vector<Move>& out) const {
                 if (!inCheck || inSet(info_.block_mask, twoStepRow, col)) {
                     m2.isCheck = inSet(info_.checkSquares[1], twoStepRow, col);
                     m2.discoveredCheck = discoveredCheck(m2);
-                    out.push_back(std::move(m2));
+                    validMoves_.push_back(std::move(m2));
                 }
             }
         }
@@ -913,12 +913,12 @@ void GameState::getPawnMoves(int row, int col, std::vector<Move>& out) const {
                             pm.pawnPromotion = p * player;
                             pm.isCheck = inSet(info_.checkSquares[p], oneStepRow, endCol);
                             pm.discoveredCheck = discoveredCheck(pm);
-                            out.push_back(std::move(pm));
+                            validMoves_.push_back(std::move(pm));
                         }
                     } else {
                         m.isCheck = inSet(info_.checkSquares[1], oneStepRow, endCol);
                         m.discoveredCheck = discoveredCheck(m);
-                        out.push_back(std::move(m));
+                        validMoves_.push_back(std::move(m));
                     }
                 }
             }
@@ -932,14 +932,14 @@ void GameState::getPawnMoves(int row, int col, std::vector<Move>& out) const {
                 if (!inCheck || inSet(info_.block_mask, oneStepRow, endCol)) {
                     m.isCheck = inSet(info_.checkSquares[1], oneStepRow, endCol);
                     m.discoveredCheck = discoveredCheck(m);
-                    out.push_back(std::move(m));
+                    validMoves_.push_back(std::move(m));
                 }
             }
         }
     }
 }
 
-void GameState::getKnightMoves(int row, int col, std::vector<Move>& out) const {
+void GameState::getKnightMoves(int row, int col) {
     const int player = player_;
     const int idx = sideIndex(player);
     static constexpr int knightMoves[8][2] = {
@@ -962,11 +962,11 @@ void GameState::getKnightMoves(int row, int col, std::vector<Move>& out) const {
         if (inCheck && !inSet(info_.block_mask, endRow, endCol)) continue;
         m.isCheck = inSet(info_.checkSquares[2], endRow, endCol);
         m.discoveredCheck = disc;
-        out.push_back(std::move(m));
+        validMoves_.push_back(std::move(m));
     }
 }
 
-void GameState::getRayMoves(int row, int col, int piece, std::vector<Move>& out) const {
+void GameState::getRayMoves(int row, int col, int piece) {
     const int player = player_;
     const int idx = sideIndex(player);
     const bool inCheck = info_.inCheck[idx];
@@ -1011,7 +1011,7 @@ void GameState::getRayMoves(int row, int col, int piece, std::vector<Move>& out)
         if (!inCheck || inSet(info_.block_mask, r, c)) {
             firstMove.isCheck = inSet(info_.checkSquares[absPiece], r, c);
             firstMove.discoveredCheck = disc;
-            out.push_back(std::move(firstMove));
+            validMoves_.push_back(std::move(firstMove));
         }
         // If first square was an enemy piece, ray stops
         if (board_[r][c] * player < 0) continue;
@@ -1025,9 +1025,71 @@ void GameState::getRayMoves(int row, int col, int piece, std::vector<Move>& out)
             if (!inCheck || inSet(info_.block_mask, r, c)) {
                 m.isCheck = inSet(info_.checkSquares[absPiece], r, c);
                 m.discoveredCheck = disc;
-                out.push_back(std::move(m));
+                validMoves_.push_back(std::move(m));
             }
             if (board_[r][c] * player < 0) break; // capture ends ray
+        }
+    }
+}
+
+void GameState::getKingMoves(int row, int col) {
+    const int player = player_;
+    const int idx = sideIndex(player);
+    static constexpr int kingOffsets[8][2] = {
+        {-1,-1}, {-1, 0}, {-1, 1},
+        { 0,-1},          { 0, 1},
+        { 1,-1}, { 1, 0}, { 1, 1}
+    };
+    // Normal king moves
+    for (const auto& off : kingOffsets) {
+        const int endRow = row + off[0];
+        const int endCol = col + off[1];
+        if (!inBounds(endRow, endCol)) continue;
+        // can't land on friendly piece
+        if (board_[endRow][endCol] * player > 0) continue;
+        Move m(row, col, endRow, endCol, board_[row][col], board_[endRow][endCol]);
+        if (checkMoveSafety(m)) {
+            m.discoveredCheck = discoveredCheck(m); // same as python
+            validMoves_.push_back(std::move(m));
+        }
+    }
+    // Castling moves (only if not currently in check)
+    if (info_.inCheck[idx]) return;
+    const auto [canK, canQ] = info_.castlingRights[idx];
+    // King side: (row,col)->(row,col+2)
+    if (canK) {
+        if (inBounds(row, col + 2) &&
+            board_[row][col + 1] == 0 &&
+            board_[row][col + 2] == 0) {
+            // Squares king passes through must not be attacked
+            const bool a1 = isAttacked(row, col + 1);
+            const bool a2 = isAttacked(row, col + 2);
+            if (!a1 && !a2) {
+                Move castle(row, col, row, col + 2, board_[row][col], 0);
+                castle.isCastlingMove = true;
+                if (inSet(info_.checkSquares[4], row, col + 1)) {
+                    castle.discoveredCheck = {row, col + 1};
+                }
+                validMoves_.push_back(std::move(castle));
+            }
+        }
+    }
+    // Queen side: (row,col)->(row,col-2)
+    if (canQ) {
+        if (inBounds(row, col - 3) &&
+            board_[row][col - 1] == 0 &&
+            board_[row][col - 2] == 0 &&
+            board_[row][col - 3] == 0) {
+            const bool a1 = isAttacked(row, col - 1);
+            const bool a2 = isAttacked(row, col - 2);
+            if (!a1 && !a2) {
+                Move castle(row, col, row, col - 2, board_[row][col], 0);
+                castle.isCastlingMove = true;
+                if (inSet(info_.checkSquares[4], row, col - 1)) {
+                    castle.discoveredCheck = {row, col - 1};
+                }
+                validMoves_.push_back(std::move(castle));
+            }
         }
     }
 }

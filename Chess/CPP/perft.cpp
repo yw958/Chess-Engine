@@ -33,11 +33,10 @@ struct PerftStats {
 //
 // If you don't want to expose info, you can skip mates counting.
 
-static PerftStats perft(GameState& gs, int depth) {
-    PerftStats total{};
-    const auto& moves = gs.validMoves(); // accessor needed
-    if (depth == 1) {
-        total.nodes = moves.size();
+void perft(GameState& gs, int depth, PerftStats& total) {
+    const auto moves = gs.validMoves(); // accessor needed
+    if (depth == 1) { 
+        total.nodes += moves.size();
         for (const Move& mv : moves) {
             if (mv.pieceCaptured != 0) total.captures++;
             if (mv.isCheck) total.checks++;
@@ -47,30 +46,18 @@ static PerftStats perft(GameState& gs, int depth) {
             if (mv.pawnPromotion != 0) total.promotions++;
             if (mv.isCheck && mv.discoveredCheck.first != -1) total.doubleChecks++;
             gs.makeMove(mv);
-            // mates: in your C++ header winner=0 means "none", so you cannot distinguish
-            // draw vs ongoing. If you later change winner sentinel (recommended), update this.
-            // For now, count "mate" only if winner is +/-1.
             const int w = gs.info().winner; // accessor needed
             if (w == 1 || w == -1) total.mates++;
             gs.undoMove(false);
         }
-        return total;
     }
-    for (const Move& mv : moves) {
-        gs.makeMove(mv);
-        const PerftStats child = perft(gs, depth - 1);
-        total.nodes += child.nodes;
-        total.captures += child.captures;
-        total.checks += child.checks;
-        total.mates += child.mates;
-        total.discoveredChecks += child.discoveredChecks;
-        total.enPassants += child.enPassants;
-        total.castles += child.castles;
-        total.promotions += child.promotions;
-        total.doubleChecks += child.doubleChecks;
-        gs.undoMove(false);
+    else{
+        for (const Move& mv : moves) {
+            gs.makeMove(mv);
+            perft(gs, depth - 1, total);
+            gs.undoMove(false);
+        }
     }
-    return total;
 }
 
 int main(int argc, char** argv) {
@@ -83,7 +70,8 @@ int main(int argc, char** argv) {
     // but calling it again is safe if you're unsure).
     gs.scanAndUpdate();
     const auto t0 = std::chrono::high_resolution_clock::now();
-    const PerftStats s = perft(gs, depth);
+    PerftStats s{};
+    perft(gs, depth, s);
     const auto t1 = std::chrono::high_resolution_clock::now();
     const std::chrono::duration<double> elapsed = t1 - t0;
     const double secs = elapsed.count();
