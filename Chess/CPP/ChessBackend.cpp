@@ -4,6 +4,18 @@
 #include <cctype>
 #include <sstream>
 
+static inline uint64_t squareMask(int r, int c) {
+    return 1ULL << static_cast<unsigned>(r * 8 + c);
+}
+
+static inline void setSquare(uint64_t& mask, int r, int c) {
+    mask |= squareMask(r, c);
+}
+
+static inline bool hasSquare(uint64_t mask, int r, int c) {
+    return (mask & squareMask(r, c)) != 0ULL;
+}
+
 std::string Move::getChessNotation() const {
     auto fileChar = [](int col) -> char {
         return static_cast<char>('a' + col);
@@ -404,7 +416,7 @@ void GameState::updateKingSafety(const Move& move) {
     const int idx = sideIndex(player_);
     const auto [kingRow, kingCol] = info_.kingLocations[idx];
     // reset block mask
-    info_.block_mask.clear();
+    info_.block_mask = 0ULL;
     bool inCheck = false;
     int attackingPiece = 0; // abs piece type; 7 => multiple attackers
     int attackingPieceRow = -1;
@@ -435,7 +447,7 @@ void GameState::updateKingSafety(const Move& move) {
     if (inCheck && attackingPiece != 7) {
         // Knight, pawn, king: only capturing attacker resolves (no interposition)
         if (attackingPiece == 2 || attackingPiece == 1 || attackingPiece == 6) {
-            info_.block_mask.insert({attackingPieceRow, attackingPieceCol});
+            setSquare(info_.block_mask, attackingPieceRow, attackingPieceCol);
         } else {
             // Sliding piece: add all squares between king and attacker, plus attacker square
             const int directionRow = (attackingPieceRow > kingRow) - (attackingPieceRow < kingRow);
@@ -443,11 +455,11 @@ void GameState::updateKingSafety(const Move& move) {
             int currRow = kingRow + directionRow;
             int currCol = kingCol + directionCol;
             while (!(currRow == attackingPieceRow && currCol == attackingPieceCol)) {
-                info_.block_mask.insert({currRow, currCol});
+                setSquare(info_.block_mask, currRow, currCol);
                 currRow += directionRow;
                 currCol += directionCol;
             }
-            info_.block_mask.insert({attackingPieceRow, attackingPieceCol});
+            setSquare(info_.block_mask, attackingPieceRow, attackingPieceCol);
         }
     }
     // Update potential pins: first friendly piece along each king ray
@@ -456,7 +468,7 @@ void GameState::updateKingSafety(const Move& move) {
         {0,-1},          {0,1},
         {1,-1},  {1,0},  {1,1}
     };
-    info_.potentialPins.clear();
+    info_.potentialPins = 0ULL;
     for (const auto& d : dirs) {
         int currRow = kingRow;
         int currCol = kingCol;
@@ -468,7 +480,7 @@ void GameState::updateKingSafety(const Move& move) {
             if (piece == 0) continue;
             // Friendly piece: potential pin square
             if ((piece > 0) == (player_ > 0)) {
-                info_.potentialPins.insert({currRow, currCol});
+                setSquare(info_.potentialPins, currRow, currCol);
                 break;
             }
             // Enemy piece blocks the ray (no friendly piece before it)
@@ -481,7 +493,7 @@ void GameState::updateKingSafety(const Move& move) {
 
 void GameState::updateCheckSquares() {
     // reset
-    for (auto& s : info_.checkSquares) s.clear();
+    for (auto& s : info_.checkSquares) s = 0ULL;
     const int enemyIdx = sideIndex(-player_);
     const auto [enemyKingR, enemyKingC] = info_.kingLocations[enemyIdx];
     // ---- Pawns (squares from which a pawn of 'player' would attack enemy king) ----
@@ -491,7 +503,7 @@ void GameState::updateCheckSquares() {
             const int r = enemyKingR + player_;
             const int c = enemyKingC + dc[i];
             if (inBounds(r, c)) {
-                info_.checkSquares[1].insert({r, c});
+                setSquare(info_.checkSquares[1], r, c);
             }
         }
     }
@@ -505,7 +517,7 @@ void GameState::updateCheckSquares() {
             const int r = enemyKingR + m[0];
             const int c = enemyKingC + m[1];
             if (inBounds(r, c)) {
-                info_.checkSquares[2].insert({r, c});
+                setSquare(info_.checkSquares[2], r, c);
             }
         }
     }
@@ -522,8 +534,8 @@ void GameState::updateCheckSquares() {
                 c += d[1];
                 if (!inBounds(r, c)) break;
                 // Add the square whether empty or occupied; stop after first occupied.
-                info_.checkSquares[3].insert({r, c}); // bishop-check squares
-                info_.checkSquares[5].insert({r, c}); // queen-check squares
+                setSquare(info_.checkSquares[3], r, c); // bishop-check squares
+                setSquare(info_.checkSquares[5], r, c); // queen-check squares
                 if (board_[r][c] != 0) break;
             }
         }
@@ -540,8 +552,8 @@ void GameState::updateCheckSquares() {
                 r += d[0];
                 c += d[1];
                 if (!inBounds(r, c)) break;
-                info_.checkSquares[4].insert({r, c}); // rook-check squares
-                info_.checkSquares[5].insert({r, c}); // queen-check squares
+                setSquare(info_.checkSquares[4], r, c); // rook-check squares
+                setSquare(info_.checkSquares[5], r, c); // queen-check squares
                 if (board_[r][c] != 0) break;
             }
         }
@@ -633,7 +645,7 @@ void GameState::updateValidMoves(int row, int col) {
     if ((piece > 0) != (player_ > 0)) return; // not our piece
     const int idx = sideIndex(player_);
     // Double check: in check AND blockMask is empty => only king moves allowed
-    if (info_.inCheck[idx] && info_.block_mask.empty()) {
+    if (info_.inCheck[idx] && info_.block_mask == 0ULL) {
         if (std::abs(piece) == 6) {
         getKingMoves(row, col);
         }
@@ -700,7 +712,7 @@ bool GameState::isPinned(const Move& move) const {
     const int player = player_;
     const int idx = sideIndex(player);
     // Quick reject: if not marked as potentially pinned, it's not pinned.
-    if (info_.potentialPins.find(Square{move.startRow, move.startCol}) == info_.potentialPins.end()) {
+    if (!hasSquare(info_.potentialPins, move.startRow, move.startCol)) {
         return false;
     }
     const int kingRow = info_.kingLocations[idx].first;
@@ -744,10 +756,8 @@ bool GameState::isPinned(const Move& move) const {
     return false;
 }
 
-inline bool inSet(const std::unordered_set<Square, SquareHash>& s,
-                  int r, int c)
-{
-    return s.find(Square{r, c}) != s.end();
+inline bool inSet(uint64_t mask, int r, int c) {
+    return hasSquare(mask, r, c);
 }
 
 // Returns:

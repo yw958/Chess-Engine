@@ -5,8 +5,6 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
-#include <set>
-#include <unordered_set>
 
 
 //////////////////////////////////////////////////////////////
@@ -31,21 +29,6 @@ struct Move {
           pieceMoved(moved), pieceCaptured(captured) {}
 };
 
-struct Square {
-    int r, c;
-    int index() const { return r * 8 + c; }
-    bool operator==(const Square& other) const noexcept {
-        return r == other.r && c == other.c;
-    }
-};
-
-struct SquareHash {
-    size_t operator()(const Square& s) const noexcept {
-        // cast to size_t to avoid signed->unsigned surprises
-        return s.r * 8 + s.c;
-    }
-};
-
 //////////////////////////////////////////////////////////////
 // Info
 //////////////////////////////////////////////////////////////
@@ -63,13 +46,13 @@ struct Info {
         std::make_pair(0,4)
     };
     std::array<bool, 3> inCheck{false, false, false};
-    std::unordered_set<Square, SquareHash> block_mask{};
+    uint64_t block_mask = 0ULL;
     std::pair<int,int> enPassantPossible = {-1, -1};
     int winner = 2;  // 1 white, -1 black, 0 draw, 2 ongoing
     int seventyFiveMoveRuleCounter = 0;
     // index 1–5 correspond to piece types
-    std::unordered_set<Square, SquareHash> potentialPins{};
-    std::array<std::unordered_set<Square, SquareHash>, 6> checkSquares{};
+    uint64_t potentialPins = 0ULL;
+    std::array<uint64_t, 6> checkSquares{};
     double eval = 0.0;
 };
 
