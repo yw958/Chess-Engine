@@ -24,6 +24,8 @@ A Python chess framework that includes backend logic, a graphical user interface
 - **ChessMain.py**: User interface for the chess game, handling graphics and user interactions. You can adjust engine depth in this file.
 - **ChessBackend.py**: Core logic for representing the chess game state, making/undoing moves, and generating valid moves.
 - **ChessEngine.py**: Chess engine implementing a negamax algorithm with alpha-beta pruning and quiescence search.
+- **torch/**: Neural-network training pipeline. The current input features use piece planes, side-to-move, castling-rights planes, and an en-passant plane to encode board state; the model is a compact convolutional policy network that outputs flattened `64 x 64` move logits; the pipeline builds training samples from PGNs, applies legal-move masks, and trains the policy with PyTorch.
+- **ChessEngineNN.py** *(under development)*: Hybrid engine that combines neural-network prior logits with top-k beam search to improve move ordering and search focus.
 
 ## References
 
@@ -33,6 +35,6 @@ A Python chess framework that includes backend logic, a graphical user interface
 The backend logic is original with a significant performance boost compared to the referenced repository. 
 
 ## Future Improvements
-- Implement backend in C++ for performance enhancement, and connect via pybind11.
-- Try Monte Carlo Tree Search (MCTS).
+- Connect the implemented C++ backend to Python via pybind11.
+- Currently building another hybrid engine that combines neural-network move priors with top-k beam search.
 - Implement magic bitboards for faster move generation.
