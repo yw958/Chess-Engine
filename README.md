@@ -9,7 +9,7 @@ A Python chess framework that includes backend logic, a graphical user interface
     - On Windows: `.\venv\Scripts\activate`
     - On macOS/Linux: `source venv/bin/activate`
 3. Install the required packages: `python -m pip install -r ./requirements.txt`
-4. Run `python -m Chess.ChessMain` to start the game.
+4. Run `python -m Chess.ChessMain` to start the classic engine UI, or `python -m Chess.ChessMainNN` to launch the hybrid NN engine UI.
 5. Enjoy the game!
 
 ## Keyboard Shortcuts
@@ -21,7 +21,8 @@ A Python chess framework that includes backend logic, a graphical user interface
 
 ## Components
 
-- **ChessMain.py**: User interface for the chess game, handling graphics and user interactions. You can adjust engine depth in this file.
+- **ChessMain.py**: User interface for the chess game, handling graphics and user interactions for the classic negamax engine. You can adjust engine depth in this file.
+- **ChessMainNN.py**: Alternate game UI entrypoint that uses the hybrid neural-network engine while keeping the same board, controls, and interaction flow.
 - **ChessBackend.py**: Core logic for representing the chess game state, making/undoing moves, and generating valid moves.
 - **ChessEngine.py**: Chess engine implementing a negamax algorithm with alpha-beta pruning and quiescence search.
 - **torch/**: Neural-network training pipeline. The current input features use piece planes, side-to-move, castling-rights planes, and an en-passant plane to encode board state; the model is a compact convolutional policy network that outputs flattened `64 x 64` move logits; the pipeline builds training samples from PGNs, applies legal-move masks, and trains the policy with PyTorch.
