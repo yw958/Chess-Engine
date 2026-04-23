@@ -1,6 +1,6 @@
 """
-Hybrid chess engine that combines neural-network move priors with beam-pruned
-negamax and quiescence search.
+Hybrid chess engine that combines normal negamax, neural-network-guided beam
+search, and quiescence search.
 """
 import importlib.util
 import os
@@ -30,8 +30,8 @@ class EngineNN(ChessEngine.Engine):
     def __init__(
         self,
         model_path: Optional[str] = None,
-        beam_width: int = 8,
-        beam_depth: int = 2,
+        beam_width: int = 5,
+        full_width_depth: int = 2,
         policy_weight: float = 1.0,
         heuristic_weight: float = 0.05,
         device: Optional[str] = None,
@@ -40,8 +40,8 @@ class EngineNN(ChessEngine.Engine):
         current_path = os.path.dirname(__file__)
         default_model_path = os.path.join(current_path, "torch", "models", "TORCH_100EPOCHS.pth")
 
-        self.beamWidth = beam_width
-        self.beamDepth = beam_depth
+        self.beamWidth = max(1, beam_width)
+        self.fullWidthDepth = max(0, full_width_depth)
         self.policyWeight = policy_weight
         self.heuristicWeight = heuristic_weight
         self.device = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
@@ -55,6 +55,36 @@ class EngineNN(ChessEngine.Engine):
         self.model = ChessModel().to(self.device)
         self.model.eval()
         self._load_model_weights()
+
+    def set_search_options(
+        self,
+        beam_width: Optional[int] = None,
+        full_width_depth: Optional[int] = None,
+        policy_weight: Optional[float] = None,
+        heuristic_weight: Optional[float] = None,
+        qply_limit: Optional[int] = None,
+    ):
+        if beam_width is not None:
+            self.beamWidth = max(1, int(beam_width))
+        if full_width_depth is not None:
+            self.fullWidthDepth = max(0, int(full_width_depth))
+        if policy_weight is not None:
+            self.policyWeight = float(policy_weight)
+        if heuristic_weight is not None:
+            self.heuristicWeight = float(heuristic_weight)
+        if qply_limit is not None:
+            self.qplyLimit = max(1, int(qply_limit))
+
+    def search_settings(self) -> str:
+        nn_status = "loaded" if self.nnEnabled else "fallback"
+        return (
+            f"depth(full->beam): {self.fullWidthDepth}, "
+            f"beam width: {self.beamWidth}, "
+            f"policy weight: {self.policyWeight:.2f}, "
+            f"heuristic weight: {self.heuristicWeight:.2f}, "
+            f"qply: {self.qplyLimit}, "
+            f"nn: {nn_status}"
+        )
 
     def _load_model_weights(self):
         if not os.path.exists(self.modelPath):
@@ -169,18 +199,34 @@ class EngineNN(ChessEngine.Engine):
 
         return sorted(moves, key=combined_score, reverse=True)
 
-    def beam_negamax(
+    def select_search_moves(
+        self,
+        game_state: ChessBackend.GameState,
+        full_width_left: int,
+    ) -> list[ChessBackend.Move]:
+        all_moves = game_state.validMoves.copy()
+        use_beam = self.nnEnabled and full_width_left <= 0
+        if use_beam:
+            all_moves = self.rank_moves(game_state, all_moves)
+            if len(all_moves) > self.beamWidth:
+                self.beamCuts += len(all_moves) - self.beamWidth
+                all_moves = all_moves[: self.beamWidth]
+        else:
+            self.sortMoves(all_moves)
+        return all_moves
+
+    def hybrid_negamax(
         self,
         game_state: ChessBackend.GameState,
         depth: int,
         alpha: float,
         beta: float,
         color: int,
-        beam_depth_left: int,
+        full_width_left: int,
     ) -> float:
         self.nodesSearched += 1
         board_rep = game_state.boardHistory[-1]
-        memo_key = (board_rep, depth, beam_depth_left)
+        memo_key = (board_rep, depth, full_width_left)
         if memo_key in self.memo:
             self.nodesFromMemo += 1
             return self.memo[memo_key]
@@ -188,21 +234,13 @@ class EngineNN(ChessEngine.Engine):
         if depth == 0 or game_state.info.winner is not None:
             return self.qSearch(game_state, alpha, beta, color, self.qplyLimit)
 
-        all_moves = game_state.validMoves.copy()
-        if beam_depth_left > 0:
-            all_moves = self.rank_moves(game_state, all_moves)
-            if len(all_moves) > self.beamWidth:
-                self.beamCuts += len(all_moves) - self.beamWidth
-                all_moves = all_moves[: self.beamWidth]
-        else:
-            self.sortMoves(all_moves)
-
+        all_moves = self.select_search_moves(game_state, full_width_left)
         best = float("-inf")
         a = alpha
-        next_beam_depth = max(beam_depth_left - 1, 0)
+        next_full_width_left = max(full_width_left - 1, 0)
         for move in all_moves:
             game_state.makeMove(move)
-            score = -self.beam_negamax(game_state, depth - 1, -beta, -a, -color, next_beam_depth)
+            score = -self.hybrid_negamax(game_state, depth - 1, -beta, -a, -color, next_full_width_left)
             game_state.undoMove(reCalculateMoves=False)
 
             if score > best:
@@ -228,20 +266,17 @@ class EngineNN(ChessEngine.Engine):
         if not all_moves:
             return None
 
-        ordered_moves = self.rank_moves(gameState, all_moves)
-        if self.beamDepth > 0 and len(ordered_moves) > self.beamWidth:
-            self.beamCuts += len(ordered_moves) - self.beamWidth
-            ordered_moves = ordered_moves[: self.beamWidth]
-
+        full_width_left = min(self.fullWidthDepth, depth)
+        ordered_moves = self.select_search_moves(gameState, full_width_left)
         color = gameState.player
         best_move = ordered_moves[0]
         best_score = float("-inf")
         alpha, beta = float("-inf"), float("inf")
-        next_beam_depth = max(min(self.beamDepth, depth) - 1, 0)
+        next_full_width_left = max(full_width_left - 1, 0)
 
         for move in ordered_moves:
             gameState.makeMove(move)
-            score = -self.beam_negamax(gameState, depth - 1, -beta, -alpha, -color, next_beam_depth)
+            score = -self.hybrid_negamax(gameState, depth - 1, -beta, -alpha, -color, next_full_width_left)
             gameState.undoMove(reCalculateMoves=False)
 
             if score > best_score:

@@ -1,11 +1,16 @@
 """
 User interface for the chess game, using the hybrid neural-network engine.
 """
+import os
+import time
+
 import pygame as p
 
 import ChessBackend
 import ChessEngineNN
 from ChessMain import (
+    BOARD_WIDTH,
+    MOVE_LOG_PANEL_WIDTH,
     MAX_FPS,
     DIMENSION,
     SQ_SIZE,
@@ -16,13 +21,81 @@ from ChessMain import (
     drawPromotionChoice,
     drawSelectedSquare,
     getValidMovesList,
-    makeEngineMove,
 )
+
+MODEL_PATH = os.path.join(os.path.dirname(__file__), "torch", "models", "TORCH_EPOCH__50.pth")
+DEFAULT_ENGINE_DEPTH = 8
+DEFAULT_BEAM_WIDTH = 3
+DEFAULT_FULL_WIDTH_DEPTH = 1
+DEFAULT_QPLY_LIMIT = 8
+
+
+def print_nn_controls():
+    print("NN engine controls:")
+    print("  E/D: enable or disable engine")
+    print("  Z/F: undo or flip board")
+    print("  Up/Down: increase or decrease search depth")
+    print("  Right/Left: increase or decrease beam width")
+    print("  PageUp/PageDown: increase or decrease full-width depth before beam search")
+    print("  = / -: increase or decrease q-search ply limit")
+
+
+def update_window_caption(engineDepth: int, engine: ChessEngineNN.EngineNN):
+    p.display.set_caption(
+        "ChessMainNN | "
+        f"depth={engineDepth} | "
+        f"full={engine.fullWidthDepth} | "
+        f"beam={engine.beamWidth} | "
+        f"qply={engine.qplyLimit} | "
+        f"nn={'on' if engine.nnEnabled else 'fallback'}"
+    )
+
+
+def print_nn_settings(engineDepth: int, engine: ChessEngineNN.EngineNN):
+    print(f"NN engine settings -> search depth: {engineDepth}, {engine.search_settings()}")
+
+
+def makeNNEngineMove(
+    gs: ChessBackend.GameState,
+    screen,
+    engine: ChessEngineNN.EngineNN,
+    flipped=False,
+    engineDepth=3,
+    moveLogFont=None,
+    engineEnabled=0,
+):
+    print("NN engine is thinking...")
+    statTime = time.time()
+    engineMove = engine.findBestMove(gs, engineDepth)
+    elapsed = time.time() - statTime
+    print("Engine move time: {:.2f} seconds".format(elapsed))
+    print(
+        f"Nodes searched: {engine.nodesSearched}, from memo: {engine.nodesFromMemo}, "
+        f"QSearched: {engine.nodesQSearched}, NN inferences: {engine.nnInferences}, "
+        f"beam cuts: {engine.beamCuts}"
+    )
+    print(
+        f"Nodes per second: "
+        f"{(engine.nodesSearched + engine.nodesFromMemo + engine.nodesQSearched) / (elapsed + 1e-9):.2f}"
+    )
+    print(engine.search_settings())
+    if engineMove is not None:
+        print(engineMove.getChessNotation())
+        gs.makeMove(engineMove)
+        drawGameState(screen, gs, flipped, moveLogFont, engineEnabled)
+        if not flipped:
+            p.draw.rect(screen, p.Color("red"), p.Rect(engineMove.endCol * SQ_SIZE, engineMove.endRow * SQ_SIZE, SQ_SIZE, SQ_SIZE), 4)
+            p.draw.rect(screen, p.Color("red"), p.Rect(engineMove.startCol * SQ_SIZE, engineMove.startRow * SQ_SIZE, SQ_SIZE, SQ_SIZE), 4)
+        else:
+            p.draw.rect(screen, p.Color("red"), p.Rect((DIMENSION - 1 - engineMove.endCol) * SQ_SIZE, (DIMENSION - 1 - engineMove.endRow) * SQ_SIZE, SQ_SIZE, SQ_SIZE), 4)
+            p.draw.rect(screen, p.Color("red"), p.Rect((DIMENSION - 1 - engineMove.startCol) * SQ_SIZE, (DIMENSION - 1 - engineMove.startRow) * SQ_SIZE, SQ_SIZE, SQ_SIZE), 4)
+    else:
+        print("No valid moves found by engine!")
 
 
 def main():
     p.init()
-    screen = p.display.set_mode((512 + 270, 512))
+    screen = p.display.set_mode((BOARD_WIDTH + MOVE_LOG_PANEL_WIDTH, BOARD_WIDTH))
     clock = p.time.Clock()
     screen.fill(p.Color("white"))
     gs = ChessBackend.GameState()
@@ -32,18 +105,25 @@ def main():
     validMoves = []
     flipped = False
 
-    engine = ChessEngineNN.EngineNN()
+    engine = ChessEngineNN.EngineNN(
+        model_path=MODEL_PATH,
+        beam_width=DEFAULT_BEAM_WIDTH,
+        full_width_depth=DEFAULT_FULL_WIDTH_DEPTH,
+    )
     engineEnabled = 0
-    engineDepth = 4
-    qplyLimit = 8
+    engineDepth = DEFAULT_ENGINE_DEPTH
+    qplyLimit = DEFAULT_QPLY_LIMIT
     engine.qplyLimit = qplyLimit
 
     moveLogFont = p.font.SysFont("", 20, False, False)
     drawGameState(screen, gs, flipped, moveLogFont, engineEnabled)
+    print_nn_controls()
+    print_nn_settings(engineDepth, engine)
+    update_window_caption(engineDepth, engine)
 
     while running:
         if engineEnabled == gs.player and gs.info.winner is None:
-            makeEngineMove(gs, screen, engine, flipped, engineDepth, moveLogFont, engineEnabled)
+            makeNNEngineMove(gs, screen, engine, flipped, engineDepth, moveLogFont, engineEnabled)
             if gs.info.winner is not None:
                 text = ""
                 if gs.info.winner == 0:
@@ -163,6 +243,32 @@ def main():
                     engineEnabled = 0
                     drawGameState(screen, gs, flipped, moveLogFont, engineEnabled)
                     print("NN engine disabled")
+                if e.key == p.K_UP:
+                    engineDepth += 1
+                    print_nn_settings(engineDepth, engine)
+                if e.key == p.K_DOWN:
+                    engineDepth = max(1, engineDepth - 1)
+                    print_nn_settings(engineDepth, engine)
+                if e.key == p.K_RIGHT:
+                    engine.set_search_options(beam_width=engine.beamWidth + 1)
+                    print_nn_settings(engineDepth, engine)
+                if e.key == p.K_LEFT:
+                    engine.set_search_options(beam_width=engine.beamWidth - 1)
+                    print_nn_settings(engineDepth, engine)
+                if e.key == p.K_PAGEUP:
+                    engine.set_search_options(full_width_depth=engine.fullWidthDepth + 1)
+                    print_nn_settings(engineDepth, engine)
+                if e.key == p.K_PAGEDOWN:
+                    engine.set_search_options(full_width_depth=engine.fullWidthDepth - 1)
+                    print_nn_settings(engineDepth, engine)
+                if e.key == p.K_EQUALS or e.key == p.K_KP_PLUS:
+                    engine.set_search_options(qply_limit=engine.qplyLimit + 1)
+                    print_nn_settings(engineDepth, engine)
+                if e.key == p.K_MINUS or e.key == p.K_KP_MINUS:
+                    engine.set_search_options(qply_limit=engine.qplyLimit - 1)
+                    print_nn_settings(engineDepth, engine)
+                update_window_caption(engineDepth, engine)
+                drawGameState(screen, gs, flipped, moveLogFont, engineEnabled)
 
         clock.tick(MAX_FPS)
         p.display.flip()
